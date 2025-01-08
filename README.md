@@ -60,15 +60,15 @@ The Schwab API Python Library offers a complete suite of trading and account man
 ### From PyPI (Recommended)
 
 ```bash
-pip install schwab-api
+pip install schwab
 ```
 
 ### From Source
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/ibouazizi/schwab-api.git
-cd schwab-api
+git clone https://github.com/ibouazizi/schwab.git
+cd schwab
 ```
 
 2. Install in development mode:
@@ -80,8 +80,8 @@ pip install -e .
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/ibouazizi/schwab-api.git
-cd schwab-api
+git clone https://github.com/ibouazizi/schwab.git
+cd schwab
 ```
 
 2. Install build dependencies:

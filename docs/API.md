@@ -17,13 +17,13 @@ This API documentation is provided for informational purposes only. Before using
 
 ### From PyPI
 ```bash
-pip install schwab-api
+pip install schwab
 ```
 
 ### From Source
 ```bash
-git clone https://github.com/ibouazizi/schwab-api.git
-cd schwab-api
+git clone https://github.com/ibouazizi/schwab.git
+cd schwab
 pip install -e .
 ```
 
