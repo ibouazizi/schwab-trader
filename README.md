@@ -2,6 +2,9 @@
 
 A comprehensive Python library for interacting with Charles Schwab's Trading API. This library provides a clean, type-safe, and Pythonic interface to Schwab's RESTful trading API, supporting both synchronous and asynchronous operations.
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+
 ## Overview
 
 The Schwab API Python Library offers a complete suite of trading and account management capabilities:
