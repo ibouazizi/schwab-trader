@@ -1,0 +1,6 @@
+include README.md
+include requirements.txt
+include LICENSE
+recursive-include schwab *.py
+recursive-include docs *
+recursive-include tests *.py
