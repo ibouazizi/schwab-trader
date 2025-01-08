@@ -2,6 +2,18 @@
 
 A comprehensive Python library for interacting with Charles Schwab's Trading API. This library provides a clean, type-safe, and Pythonic interface to Schwab's RESTful trading API, supporting both synchronous and asynchronous operations.
 
+## ⚠️ Important Disclaimer
+
+**USE THIS SOFTWARE AT YOUR OWN RISK**. This software is provided "AS IS" without any warranties or guarantees. The authors and contributors:
+- Are NOT liable for any trading losses, missed opportunities, or other financial damages
+- Do NOT provide financial, investment, or trading advice
+- Are NOT responsible for bugs, downtime, or technical issues that may affect trading
+- Make NO guarantees about the accuracy or reliability of the software
+
+By using this software, you acknowledge that trading involves substantial risk and that you may lose part or all of your investment. For complete terms, please read our [full disclaimer](docs/DISCLAIMER.md).
+
+**Always verify your trades and maintain proper risk management practices.**
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
@@ -55,7 +67,7 @@ pip install schwab-api
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/openhands/schwab-api.git
+git clone https://github.com/ibouazizi/schwab-api.git
 cd schwab-api
 ```
 
@@ -68,7 +80,7 @@ pip install -e .
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/openhands/schwab-api.git
+git clone https://github.com/ibouazizi/schwab-api.git
 cd schwab-api
 ```
 
