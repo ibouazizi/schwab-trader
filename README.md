@@ -100,7 +100,7 @@ This will create two files in the `dist` directory:
 
 4. Install the built package:
 ```bash
-pip install dist/schwab_api-*.whl
+pip install dist/schwab-trader-*.whl
 ```
 
 ### Development Installation
