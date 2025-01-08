@@ -17,13 +17,13 @@ This API documentation is provided for informational purposes only. Before using
 
 ### From PyPI
 ```bash
-pip install schwabapi
+pip install schwab-trader
 ```
 
 ### From Source
 ```bash
-git clone https://github.com/ibouazizi/schwabapi.git
-cd schwabapi
+git clone https://github.com/ibouazizi/schwab-trader.git
+cd schwab-trader
 pip install -e .
 ```
 

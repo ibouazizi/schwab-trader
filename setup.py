@@ -7,14 +7,14 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
     requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
 
 setup(
-    name="schwabapi",
+    name="schwab-trader",
     version="0.1.0",
     author="Iheb Bouazizi",
     author_email="iheb.bouazizi@gmail.com",
     description="A Python library for interacting with Charles Schwab's Trading API",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/ibouazizi/schwabapi",
+    url="https://github.com/ibouazizi/schwab-trader",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
