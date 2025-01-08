@@ -1,5 +1,8 @@
 # Schwab API Python Library Documentation
 
+## ⚠️ Important Notice
+This API documentation is provided for informational purposes only. Before using this library, please read and understand our [full disclaimer](DISCLAIMER.md). By using this library, you acknowledge that trading involves substantial risk and that you are solely responsible for verifying and validating all trading operations.
+
 ## Table of Contents
 1. [Installation](#installation)
 2. [Client Initialization](#client-initialization)
@@ -19,7 +22,7 @@ pip install schwab-api
 
 ### From Source
 ```bash
-git clone https://github.com/openhands/schwab-api.git
+git clone https://github.com/ibouazizi/schwab-api.git
 cd schwab-api
 pip install -e .
 ```

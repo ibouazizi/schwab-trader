@@ -9,12 +9,12 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 setup(
     name="schwab-api",
     version="0.1.0",
-    author="OpenHands",
-    author_email="openhands@all-hands.dev",
+    author="Iheb Bouazizi",
+    author_email="iheb.bouazizi@gmail.com",
     description="A Python library for interacting with Charles Schwab's Trading API",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/openhands/schwab-api",
+    url="https://github.com/ibouazizi/schwab-api",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
