@@ -5,14 +5,19 @@ from urllib.parse import urljoin
 from decimal import Decimal
 from .auth import SchwabAuth
 
-from .models.base import AccountNumber, AccountNumbers, ErrorResponse
-from .models.account import Account
-from .models.orders import (
-    Order, OrderList, OrderType, OrderInstruction, OrderSession,
-    OrderDuration, RequestedDestination, TaxLotMethod, SpecialInstruction,
+from .models.base import ErrorResponse
+from .models.generated.trading_models import AccountNumberHash as AccountNumber, Account
+from .models.base import AccountNumbers
+from .models.generated.trading_models import (
+    Order, OrderType, Session as OrderSession,
+    Duration as OrderDuration, RequestedDestination, 
     ComplexOrderStrategyType, OrderStrategyType, OrderLeg, OrderLegType,
-    PositionEffect, QuantityType, DividendCapitalGains, StopPriceLinkBasis,
-    StopPriceLinkType, StopType
+    PositionEffect, StopPriceLinkBasis,
+    StopPriceLinkType, StopType, Instruction as OrderInstruction,
+    TaxLotMethod, SpecialInstruction
+)
+from .models.orders import (
+    QuantityType, DividendCapitalGains
 )
 from .order_management import OrderManagement
 from .order_monitor import OrderMonitor
@@ -50,6 +55,18 @@ class SchwabClient(QuotesMixin):
         # Initialize order management and monitoring
         self.order_management = OrderManagement(self)
         self.order_monitor = OrderMonitor(self)
+    
+    def _get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make a GET request to the API.
+        
+        Args:
+            endpoint: API endpoint
+            params: Optional query parameters
+            
+        Returns:
+            API response as dictionary
+        """
+        return self._make_request("GET", endpoint, params=params)
     
     def _make_request(
         self,
@@ -103,7 +120,7 @@ class SchwabClient(QuotesMixin):
     
     def get_account_numbers(self) -> AccountNumbers:
         """Get list of account numbers and their encrypted values."""
-        data = self._make_request("GET", "/accounts/numbers")
+        data = self._make_request("GET", "/accounts/accountNumbers")
         return AccountNumbers(accounts=[AccountNumber(**account) for account in data])
     
     def get_accounts(self, include_positions: bool = False) -> List[Account]:
@@ -118,7 +135,7 @@ class SchwabClient(QuotesMixin):
         params = {"fields": "positions"} if include_positions else None
         data = self._make_request(
             "GET",
-            "/accounts/positions" if include_positions else "/accounts",
+            "/accounts",
             params=params
         )
         return [Account(**account) for account in data]
@@ -134,12 +151,7 @@ class SchwabClient(QuotesMixin):
             Account information
         """
         params = {"fields": "positions"} if include_positions else None
-        endpoint = (
-            f"/accounts/{account_number}/positions"
-            if include_positions
-            else f"/accounts/{account_number}"
-        )
-        data = self._make_request("GET", endpoint, params=params)
+        data = self._make_request("GET", f"/accounts/{account_number}", params=params)
         return Account(**data)
     
     def get_orders(
@@ -149,7 +161,7 @@ class SchwabClient(QuotesMixin):
         to_entered_time: datetime,
         max_results: Optional[int] = None,
         status: Optional[str] = None
-    ) -> OrderList:
+    ) -> List[Order]:
         """Get orders for a specific account.
         
         Args:
@@ -163,16 +175,16 @@ class SchwabClient(QuotesMixin):
             List of orders
         """
         params = {
-            "fromDate": from_entered_time.strftime("%Y-%m-%d"),
-            "toDate": to_entered_time.strftime("%Y-%m-%d"),
+            "fromEnteredTime": from_entered_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "toEnteredTime": to_entered_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
         }
         if max_results is not None:
             params["maxResults"] = max_results
         if status is not None:
             params["status"] = status
             
-        data = self._make_request("GET", f"/accounts/{account_number}/orders/history", params=params)
-        return OrderList(**data)
+        data = self._make_request("GET", f"/accounts/{account_number}/orders", params=params)
+        return [Order(**order) for order in data]
         
     def place_order(self, account_number: str, order: Order) -> None:
         """Place an order for a specific account.
@@ -187,7 +199,7 @@ class SchwabClient(QuotesMixin):
         Raises:
             requests.exceptions.RequestException: If the request fails
         """
-        self._make_request("POST", f"/accounts/{account_number}/orders/place", json=order.model_dump(by_alias=True))
+        self._make_request("POST", f"/accounts/{account_number}/orders", json=order.model_dump(by_alias=True))
         
     def replace_order(self, account_number: str, order_id: int, new_order: Order) -> None:
         """Replace an existing order with a new order.
@@ -207,7 +219,7 @@ class SchwabClient(QuotesMixin):
         """
         self._make_request(
             "PUT",
-            f"/accounts/{account_number}/orders/{order_id}/replace",
+            f"/accounts/{account_number}/orders/{order_id}",
             json=new_order.model_dump(by_alias=True)
         )
         
@@ -224,7 +236,7 @@ class SchwabClient(QuotesMixin):
         Raises:
             requests.exceptions.RequestException: If the request fails
         """
-        self._make_request("DELETE", f"/accounts/{account_number}/orders/{order_id}/cancel")
+        self._make_request("DELETE", f"/accounts/{account_number}/orders/{order_id}")
         
     def get_order(self, account_number: str, order_id: int) -> Order:
         """Get a specific order by its ID.
@@ -239,7 +251,7 @@ class SchwabClient(QuotesMixin):
         Raises:
             requests.exceptions.RequestException: If the request fails
         """
-        data = self._make_request("GET", f"/accounts/{account_number}/orders/{order_id}/details")
+        data = self._make_request("GET", f"/accounts/{account_number}/orders/{order_id}")
         return Order(**data)
 
     # Order Management Methods
@@ -533,6 +545,90 @@ class SchwabClient(QuotesMixin):
                 )
             ]
         )
+    def get_option_chain(self, symbol: str, contract_type: str = None, strike_count: int = None,
+                        include_underlying_quote: bool = None, strategy: str = None,
+                        strike_from_date: str = None, strike_to_date: str = None,
+                        strike_from: float = None, strike_to: float = None,
+                        expiration_month: str = None, option_type: str = None,
+                        days_to_expiration: int = None, exp_month: str = None,
+                        option_detail_flag: bool = None, 
+                        entitlement: str = "np") -> Dict[str, Any]:
+        """
+        Get option chain for a symbol.
+        
+        Args:
+            symbol: The underlying symbol for the option chain
+            contract_type: Type of contracts (CALL, PUT, ALL)
+            strike_count: Number of strikes to return
+            include_underlying_quote: Include quote for underlying symbol
+            strategy: Option strategy (SINGLE, ANALYTICAL, COVERED, VERTICAL, etc.)
+            strike_from_date: From date for strike range (yyyy-MM-dd)
+            strike_to_date: To date for strike range (yyyy-MM-dd)
+            strike_from: From strike price
+            strike_to: To strike price
+            expiration_month: Expiration month (ALL, JAN, FEB, etc.)
+            option_type: Option type (S for Standard, NS for Non-Standard, ALL)
+            days_to_expiration: Days to expiration
+            exp_month: Expiration month (ALL, JAN, FEB, etc.)
+            option_detail_flag: Include additional option details
+            entitlement: Entitlement level (np, npbo, retail)
+            
+        Returns:
+            Dictionary containing option chain data
+        """
+        params = {
+            "symbol": symbol,
+            "entitlement": entitlement
+        }
+        
+        # Add optional parameters
+        if contract_type:
+            params["contractType"] = contract_type
+        if strike_count is not None:
+            params["strikeCount"] = strike_count
+        if include_underlying_quote is not None:
+            params["includeUnderlyingQuote"] = include_underlying_quote
+        if strategy:
+            params["strategy"] = strategy
+        if strike_from_date:
+            params["strikeFromDate"] = strike_from_date
+        if strike_to_date:
+            params["strikeToDate"] = strike_to_date
+        if strike_from is not None:
+            params["strikeFrom"] = strike_from
+        if strike_to is not None:
+            params["strikeTo"] = strike_to
+        if expiration_month:
+            params["expirationMonth"] = expiration_month
+        if option_type:
+            params["optionType"] = option_type
+        if days_to_expiration is not None:
+            params["daysToExpiration"] = days_to_expiration
+        if exp_month:
+            params["expMonth"] = exp_month
+        if option_detail_flag is not None:
+            params["optionDetailFlag"] = option_detail_flag
+            
+        return self._make_request("GET", "/marketdata/v1/chains", params=params)
+    
+    def get_option_expiration_chain(self, symbol: str, 
+                                   entitlement: str = "np") -> Dict[str, Any]:
+        """
+        Get option expiration dates for a symbol.
+        
+        Args:
+            symbol: The underlying symbol
+            entitlement: Entitlement level (np, npbo, retail)
+            
+        Returns:
+            Dictionary containing expiration dates
+        """
+        params = {
+            "symbol": symbol,
+            "entitlement": entitlement
+        }
+        
+        return self._make_request("GET", "/marketdata/v1/expirationchain", params=params)
 def create_stop_limit_order(
     self,
     symbol: str,
@@ -738,67 +834,68 @@ def create_market_on_close_order(
         ]
     )
 
-def create_limit_on_close_order(
-    self,
-    symbol: str,
-    quantity: Union[int, Decimal],
-    limit_price: Union[float, Decimal],
-    instruction: OrderInstruction,
-    description: Optional[str] = None,
-    instrument_id: Optional[int] = None,
-    session: OrderSession = OrderSession.NORMAL,
-    requested_destination: Optional[RequestedDestination] = None,
-    tax_lot_method: Optional[TaxLotMethod] = None,
-    special_instruction: Optional[SpecialInstruction] = None
-) -> Order:
-    """Create a limit-on-close order.
-    
-    Args:
-        symbol: The symbol to trade
-        quantity: The quantity to trade
-        limit_price: The limit price
-        instruction: BUY or SELL
-        description: Optional description of the instrument
-        instrument_id: Optional instrument ID
-        session: Order session (default: NORMAL)
-        requested_destination: Optional trading destination
-        tax_lot_method: Optional tax lot method
-        special_instruction: Optional special instruction
+    def create_limit_on_close_order(
+            self,
+        symbol: str,
+        quantity: Union[int, Decimal],
+        limit_price: Union[float, Decimal],
+        instruction: OrderInstruction,
+        description: Optional[str] = None,
+        instrument_id: Optional[int] = None,
+        session: OrderSession = OrderSession.NORMAL,
+        requested_destination: Optional[RequestedDestination] = None,
+        tax_lot_method: Optional[TaxLotMethod] = None,
+        special_instruction: Optional[SpecialInstruction] = None
+    ) -> Order:
+        """Create a limit-on-close order.
         
-    Returns:
-        Order object ready to be placed
-    """
-    quantity = Decimal(str(quantity))
-    limit_price = Decimal(str(limit_price))
-    return Order(
-        session=session,
-        duration=OrderDuration.DAY,  # LOC orders must be DAY orders
-        order_type=OrderType.LIMIT_ON_CLOSE,
-        complex_order_strategy_type=ComplexOrderStrategyType.NONE,
-        quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
-        requested_destination=requested_destination,
-        price=limit_price,
-        tax_lot_method=tax_lot_method,
-        special_instruction=special_instruction,
-        order_strategy_type=OrderStrategyType.SINGLE,
-        order_leg_collection=[
-            OrderLeg(
-                order_leg_type=OrderLegType.EQUITY,
-                leg_id=1,
-                instrument={
-                    "symbol": symbol,
-                    "description": description or symbol,
-                    "instrument_id": instrument_id or 0,
-                    "net_change": Decimal("0"),
-                    "type": "EQUITY"
-                },
-                instruction=instruction,
-                position_effect=PositionEffect.OPENING,
-                quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
-                div_cap_gains=DividendCapitalGains.REINVEST
-            )
-        ]
-    )
+        Args:
+            symbol: The symbol to trade
+            quantity: The quantity to trade
+            limit_price: The limit price
+            instruction: BUY or SELL
+            description: Optional description of the instrument
+            instrument_id: Optional instrument ID
+            session: Order session (default: NORMAL)
+            requested_destination: Optional trading destination
+            tax_lot_method: Optional tax lot method
+            special_instruction: Optional special instruction
+            
+        Returns:
+            Order object ready to be placed
+        """
+        quantity = Decimal(str(quantity))
+        limit_price = Decimal(str(limit_price))
+        return Order(
+            session=session,
+            duration=OrderDuration.DAY,  # LOC orders must be DAY orders
+            order_type=OrderType.LIMIT_ON_CLOSE,
+            complex_order_strategy_type=ComplexOrderStrategyType.NONE,
+            quantity=quantity,
+            filled_quantity=Decimal("0"),
+            remaining_quantity=quantity,
+            requested_destination=requested_destination,
+            price=limit_price,
+            tax_lot_method=tax_lot_method,
+            special_instruction=special_instruction,
+            order_strategy_type=OrderStrategyType.SINGLE,
+            order_leg_collection=[
+                OrderLeg(
+                    order_leg_type=OrderLegType.EQUITY,
+                    leg_id=1,
+                    instrument={
+                        "symbol": symbol,
+                        "description": description or symbol,
+                        "instrument_id": instrument_id or 0,
+                        "net_change": Decimal("0"),
+                        "type": "EQUITY"
+                    },
+                    instruction=instruction,
+                    position_effect=PositionEffect.OPENING,
+                    quantity=quantity,
+                    quantity_type=QuantityType.ALL_SHARES,
+                    div_cap_gains=DividendCapitalGains.REINVEST
+                )
+            ]
+        )
+

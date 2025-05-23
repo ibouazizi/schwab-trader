@@ -128,3 +128,15 @@ class QuoteResponse(RootModel):
 
     def __getitem__(self, key):
         return self.root[key]
+    
+    def __contains__(self, key):
+        return key in self.root
+    
+    def keys(self):
+        return self.root.keys()
+    
+    def values(self):
+        return self.root.values()
+    
+    def items(self):
+        return self.root.items()

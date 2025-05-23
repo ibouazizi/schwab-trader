@@ -3,9 +3,9 @@ from datetime import datetime
 import aiohttp
 from urllib.parse import urljoin
 
-from .models.base import AccountNumber, AccountNumbers, ErrorResponse
-from .models.account import Account
-from .models.orders import Order, OrderList
+from .models.base import ErrorResponse, AccountNumbers
+from .models.generated.trading_models import AccountNumberHash as AccountNumber, Account
+from .models.generated.trading_models import Order
 from .models.quotes import QuoteResponse
 from .api.quotes import QuotesMixin
 
@@ -123,7 +123,7 @@ class AsyncSchwabClient(QuotesMixin):
         to_entered_time: datetime,
         max_results: Optional[int] = None,
         status: Optional[str] = None
-    ) -> OrderList:
+    ) -> List[Order]:
         """Get orders for a specific account.
         
         Args:
@@ -146,7 +146,7 @@ class AsyncSchwabClient(QuotesMixin):
             params["status"] = status
             
         data = await self._make_request("GET", f"/accounts/{account_number}/orders", params=params)
-        return OrderList(**data)
+        return [Order(**order) for order in data]
         
     async def place_order(self, account_number: str, order: Order) -> None:
         """Place an order for a specific account.
@@ -215,3 +215,102 @@ class AsyncSchwabClient(QuotesMixin):
         """
         data = await self._make_request("GET", f"/accounts/{account_number}/orders/{order_id}")
         return Order(**data)
+
+
+    async def get_option_chain(self, symbol: str, contract_type: str = None, strike_count: int = None,
+                              include_underlying_quote: bool = None, strategy: str = None,
+                              strike_from_date: str = None, strike_to_date: str = None,
+                              strike_from: float = None, strike_to: float = None,
+                              expiration_month: str = None, option_type: str = None,
+                              days_to_expiration: int = None, exp_month: str = None,
+                              option_detail_flag: bool = None, 
+                              entitlement: str = "np") -> Dict[str, Any]:
+        """
+        Get option chain for a symbol.
+        
+        Args:
+            symbol: The underlying symbol for the option chain
+            contract_type: Type of contracts (CALL, PUT, ALL)
+            strike_count: Number of strikes to return
+            include_underlying_quote: Include quote for underlying symbol
+            strategy: Option strategy (SINGLE, ANALYTICAL, COVERED, VERTICAL, etc.)
+            strike_from_date: From date for strike range (yyyy-MM-dd)
+            strike_to_date: To date for strike range (yyyy-MM-dd)
+            strike_from: From strike price
+            strike_to: To strike price
+            expiration_month: Expiration month (ALL, JAN, FEB, etc.)
+            option_type: Option type (S for Standard, NS for Non-Standard, ALL)
+            days_to_expiration: Days to expiration
+            exp_month: Expiration month (ALL, JAN, FEB, etc.)
+            option_detail_flag: Include additional option details
+            entitlement: Entitlement level (np, npbo, retail)
+            
+        Returns:
+            Dictionary containing option chain data
+        """
+        params = {
+            "symbol": symbol,
+            "entitlement": entitlement
+        }
+        
+        # Add optional parameters
+        if contract_type:
+            params["contractType"] = contract_type
+        if strike_count is not None:
+            params["strikeCount"] = strike_count
+        if include_underlying_quote is not None:
+            params["includeUnderlyingQuote"] = include_underlying_quote
+        if strategy:
+            params["strategy"] = strategy
+        if strike_from_date:
+            params["strikeFromDate"] = strike_from_date
+        if strike_to_date:
+            params["strikeToDate"] = strike_to_date
+        if strike_from is not None:
+            params["strikeFrom"] = strike_from
+        if strike_to is not None:
+            params["strikeTo"] = strike_to
+        if expiration_month:
+            params["expirationMonth"] = expiration_month
+        if option_type:
+            params["optionType"] = option_type
+        if days_to_expiration is not None:
+            params["daysToExpiration"] = days_to_expiration
+        if exp_month:
+            params["expMonth"] = exp_month
+        if option_detail_flag is not None:
+            params["optionDetailFlag"] = option_detail_flag
+            
+        return await self._make_request("GET", "/marketdata/v1/chains", params=params)
+    
+    async def get_option_expiration_chain(self, symbol: str, 
+                                         entitlement: str = "np") -> Dict[str, Any]:
+        """
+        Get option expiration dates for a symbol.
+        
+        Args:
+            symbol: The underlying symbol
+            entitlement: Entitlement level (np, npbo, retail)
+            
+        Returns:
+            Dictionary containing expiration dates
+        """
+        params = {
+            "symbol": symbol,
+            "entitlement": entitlement
+        }
+        
+        return await self._make_request("GET", "/marketdata/v1/expirationchain", params=params)
+
+    
+    async def _async_get(self, endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Make a GET request to the API.
+        
+        Args:
+            endpoint: API endpoint
+            params: Optional query parameters
+            
+        Returns:
+            API response as dictionary
+        """
+        return await self._make_request("GET", endpoint, params=params)

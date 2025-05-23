@@ -1,9 +1,10 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic import BaseModel, Field
 
 class SchwabBaseModel(BaseModel):
     """Base model for all Schwab API models."""
-    pass
+    class Config:
+        populate_by_name = True  # Allow population by field name or alias
 
 class ErrorResponse(SchwabBaseModel):
     """Error response model."""
@@ -12,9 +13,9 @@ class ErrorResponse(SchwabBaseModel):
 
 class AccountNumber(SchwabBaseModel):
     """Account number and its encrypted hash value."""
-    account_number: str = Field(..., description="The plain text account number")
-    hash_value: str = Field(..., description="The encrypted hash value of the account number")
+    account_number: str = Field(..., alias="accountNumber", description="The plain text account number")
+    hash_value: str = Field(..., alias="hashValue", description="The encrypted hash value of the account number")
 
 class AccountNumbers(SchwabBaseModel):
     """List of account numbers."""
-    accounts: List[AccountNumber]
+    accounts: List[Any]  # Will accept AccountNumber or AccountNumberHash
