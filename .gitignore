@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+examples/portfolio_gui.db
 
 # Virtual Environment
 venv/

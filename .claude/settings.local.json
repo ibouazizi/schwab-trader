@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep:*)",
+      "Bash(python:*)",
+      "Bash(rm:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir:*)",
+      "Bash(sed:*)",
+      "Bash(find:*)",
+      "Bash(pip install:*)",
+      "Bash(rg:*)",
+      "Bash(mv:*)",
+      "Bash(pdftotext:*)",
+      "Bash(awk:*)",
+      "Bash(sqlite3:*)"
+    ],
+    "deny": []
+  }
+}
