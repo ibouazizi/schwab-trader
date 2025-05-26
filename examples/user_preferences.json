@@ -1,0 +1,18 @@
+{
+  "theme": [
+    "system",
+    "blue"
+  ],
+  "refresh_interval": 30,
+  "window_geometry": "1606x891+59+126",
+  "watched_symbols": [
+    "GOOGL",
+    "TSLA",
+    "QCOM",
+    "AMZN",
+    "AMD",
+    "META",
+    "NVDA",
+    "AAPL"
+  ]
+}

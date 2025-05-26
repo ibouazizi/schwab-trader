@@ -13,7 +13,9 @@
       "Bash(mv:*)",
       "Bash(pdftotext:*)",
       "Bash(awk:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(chmod:*)",
+      "Bash(cp:*)"
     ],
     "deny": []
   }

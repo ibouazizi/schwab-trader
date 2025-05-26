@@ -18,12 +18,10 @@ from typing import Dict, List
 from tabulate import tabulate
 from schwab import SchwabClient, SchwabAuth
 from schwab.models.orders import Order, OrderStatus, OrderType, OrderInstruction
+from credential_manager import CredentialManager
 
-
-# API information - Replace with your API keys
-SCHWAB_CLIENT_ID = 'YOUR_CLIENT_ID'
-SCHWAB_CLIENT_SECRET = 'YOUR_CLIENT_SECRET'
-SCHWAB_REDIRECT_URI = 'YOUR_REDIRECT_URI'
+# Initialize credential manager
+cred_manager = CredentialManager()
 
 def get_authorization_code(auth: 'SchwabAuth') -> str:
     """
@@ -177,26 +175,61 @@ class AccountOverview:
             ))
 
 def main():
-    # Get OAuth credentials from environment
-    client_id = SCHWAB_CLIENT_ID
-    client_secret = SCHWAB_CLIENT_SECRET
-    redirect_uri = SCHWAB_REDIRECT_URI    
+    # Check for stored credentials or prompt for new ones
+    auth_params = cred_manager.get_auth_params()
+    
+    if not auth_params:
+        print("\nNo stored credentials found. Please enter your Schwab API credentials.")
+        print("You can obtain these from: https://developer.schwab.com\n")
+        
+        client_id = input("Client ID: ").strip()
+        client_secret = input("Client Secret: ").strip()
+        redirect_uri = input("Redirect URI (default: https://localhost:8443/callback): ").strip()
+        
+        if not redirect_uri:
+            redirect_uri = "https://localhost:8443/callback"
+        
+        # Save credentials
+        cred_manager.save_credentials(client_id, client_secret, redirect_uri)
+        auth_params = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri
+        }
+    else:
+        print("\nUsing stored credentials...")
 
     try:
         # Initialize the client with OAuth credentials
         client = SchwabClient(            
-            client_id=client_id,
-            client_secret=client_secret,
-            redirect_uri=redirect_uri
+            client_id=auth_params['client_id'],
+            client_secret=auth_params['client_secret'],
+            redirect_uri=auth_params.get('redirect_uri', 'https://localhost:8443/callback')
         )
         
-        # Get authorization code through OAuth flow
-        auth_code = get_authorization_code(client.auth)
-        
-        # Exchange authorization code for tokens
-        print("\nExchanging authorization code for tokens...")
-        token_data = client.auth.exchange_code_for_tokens(auth_code)
-        print("Successfully authenticated!")
+        # Check for valid tokens
+        tokens = cred_manager.get_tokens()
+        if tokens and tokens['is_valid']:
+            print("Using stored access token...")
+            client.auth.access_token = tokens['access_token']
+            client.auth.refresh_token = tokens['refresh_token']
+            print("Successfully authenticated using stored tokens!")
+        else:
+            # Get new authorization
+            auth_code = get_authorization_code(client.auth)
+            
+            # Exchange authorization code for tokens
+            print("\nExchanging authorization code for tokens...")
+            token_data = client.auth.exchange_code_for_tokens(auth_code)
+            print("Successfully authenticated!")
+            
+            # Save tokens
+            if hasattr(client.auth, 'access_token') and client.auth.access_token:
+                cred_manager.save_tokens(
+                    client.auth.access_token,
+                    client.auth.refresh_token if hasattr(client.auth, 'refresh_token') else None,
+                    expires_in=1800  # 30 minutes
+                )
         
         # Initialize the overview class
         overview = AccountOverview(client)

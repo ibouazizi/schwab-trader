@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Real-time stock quote display using the Schwab API with direct API key authentication."""
+"""Real-time stock quote display using the Schwab API with unified credential management."""
 
 import os
+import sys
 import asyncio
 import aiohttp
 from datetime import datetime, timedelta
@@ -14,10 +15,13 @@ from pathlib import Path
 from schwab import AsyncSchwabClient
 from schwab.models.quotes import QuoteData
 
+# Add parent directory to path if needed
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# API information - Replace with your API keys
-API_KEY = 'YOUR_API_KEY'
-API_SECRET = 'YOUR_API_SECRET'
+from credential_manager import CredentialManager
+
+# Initialize credential manager
+cred_manager = CredentialManager()
 
 # API endpoints
 TOKEN_URL = "https://api.schwabapi.com/v1/oauth/token"
@@ -37,13 +41,34 @@ class QuoteMonitor:
         self.running = True
         self.access_token = None
         self.token_expires_at = 0
+        self.api_key = None
+        self.api_secret = None
         
         # Initialize client
         self.client = None  # Will be initialized in setup
         
+        # Load credentials from database
+        self._load_credentials()
+        
+    def _load_credentials(self):
+        """Load API credentials from the unified database."""
+        creds = cred_manager.get_credentials("trading")
+        if not creds:
+            print("ERROR: No credentials found in database.")
+            print("Please run setup_credentials.py first to configure your API credentials.")
+            sys.exit(1)
+        
+        self.api_key = creds.get('client_id')
+        self.api_secret = creds.get('client_secret')
+        
+        if not self.api_key or not self.api_secret:
+            print("ERROR: Invalid credentials in database.")
+            print("Please run setup_credentials.py to reconfigure.")
+            sys.exit(1)
+        
     def get_basic_auth_header(self) -> str:
         """Create Basic Auth header from API credentials."""
-        credentials = f"{API_KEY}:{API_SECRET}"
+        credentials = f"{self.api_key}:{self.api_secret}"
         encoded = base64.b64encode(credentials.encode()).decode()
         return f"Basic {encoded}"
 
@@ -179,6 +204,23 @@ class QuoteMonitor:
 
 
 async def main():
+    # Check for stored credentials or prompt for new ones
+    auth_params = cred_manager.get_auth_params()
+    
+    if not auth_params:
+        print("\nNo stored credentials found. Please enter your Schwab API credentials.")
+        print("You can obtain these from: https://developer.schwab.com\n")
+        
+        client_id = input("Client ID: ").strip()
+        client_secret = input("Client Secret: ").strip()
+        redirect_uri = input("Redirect URI (default: https://localhost:8443/callback): ").strip()
+        
+        if not redirect_uri:
+            redirect_uri = "https://localhost:8443/callback"
+        
+        # Save credentials
+        cred_manager.save_credentials(client_id, client_secret, redirect_uri)
+    
     # Tech stock symbols to monitor
     symbols = [
         "AAPL", "MSFT", "AMZN", "GOOGL", "META", "NVDA",

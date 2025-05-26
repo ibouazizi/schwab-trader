@@ -26,6 +26,7 @@ from schwab.models.generated.trading_models import (
     Session,
     OrderType
 )
+from credential_manager import CredentialManager
 
 # Configure logging
 logging.basicConfig(
@@ -34,10 +35,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# API information - Replace with your API keys
-SCHWAB_CLIENT_ID = os.getenv('SCHWAB_CLIENT_ID', 'YOUR_CLIENT_ID')
-SCHWAB_CLIENT_SECRET = os.getenv('SCHWAB_CLIENT_SECRET', 'YOUR_CLIENT_SECRET')
-SCHWAB_REDIRECT_URI = os.getenv('SCHWAB_REDIRECT_URI', 'YOUR_REDIRECT_URI')
+# Initialize credential manager
+cred_manager = CredentialManager()
 
 # Where to store portfolio state
 PERSISTENCE_PATH = 'portfolio_state.json'

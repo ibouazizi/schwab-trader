@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 # Database path
-DB_PATH = Path(__file__).parent / 'portfolio_gui.db'
+DB_PATH = Path(__file__).parent / 'schwab_trader.db'
 
 def clear_database():
     """Clear all existing credentials and tokens from database"""

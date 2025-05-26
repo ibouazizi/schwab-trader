@@ -19,6 +19,7 @@ from schwab.paper_trading.client import PaperTradingClient
 from schwab.paper_trading.account import PaperAccountManager
 from schwab.models.generated.trading_models import Instruction as OrderInstruction
 from schwab.portfolio import PortfolioManager
+from credential_manager import CredentialManager
 
 # Configure logging
 logging.basicConfig(
@@ -27,10 +28,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# API information - Replace with your API keys
-SCHWAB_CLIENT_ID = 'YOUR_CLIENT_ID'
-SCHWAB_CLIENT_SECRET = 'YOUR_CLIENT_SECRET'
-SCHWAB_REDIRECT_URI = 'YOUR_REDIRECT_URI'
+# Initialize credential manager
+cred_manager = CredentialManager()
 
 def get_authorization_code(auth):
     """
@@ -121,22 +120,62 @@ def order_status_callback(order, status):
 
 def main():
     """Main function demonstrating paper trading capabilities."""
+    # Check for stored credentials or prompt for new ones
+    auth_params = cred_manager.get_auth_params()
+    
+    if not auth_params:
+        print("\nNo stored credentials found. Please enter your Schwab API credentials.")
+        print("You can obtain these from: https://developer.schwab.com\n")
+        
+        client_id = input("Client ID: ").strip()
+        client_secret = input("Client Secret: ").strip()
+        redirect_uri = input("Redirect URI (default: https://localhost:8443/callback): ").strip()
+        
+        if not redirect_uri:
+            redirect_uri = "https://localhost:8443/callback"
+        
+        # Save credentials
+        cred_manager.save_credentials(client_id, client_secret, redirect_uri)
+        auth_params = {
+            'client_id': client_id,
+            'client_secret': client_secret,
+            'redirect_uri': redirect_uri
+        }
+    else:
+        print("\nUsing stored credentials...")
+    
     try:
         # Initialize the paper trading client
         client = PaperTradingClient(
-            client_id=SCHWAB_CLIENT_ID,
-            client_secret=SCHWAB_CLIENT_SECRET,
-            redirect_uri=SCHWAB_REDIRECT_URI,
+            client_id=auth_params['client_id'],
+            client_secret=auth_params['client_secret'],
+            redirect_uri=auth_params.get('redirect_uri', 'https://localhost:8443/callback'),
             paper_trading_enabled=True  # Start in paper trading mode
         )
         
-        # Get authorization code through OAuth flow
-        auth_code = get_authorization_code(client.auth)
-        
-        # Exchange authorization code for tokens
-        print("\nExchanging authorization code for tokens...")
-        token_data = client.auth.exchange_code_for_tokens(auth_code)
-        print("Successfully authenticated!")
+        # Check for valid tokens
+        tokens = cred_manager.get_tokens()
+        if tokens and tokens['is_valid']:
+            print("Using stored access token...")
+            client.auth.access_token = tokens['access_token']
+            client.auth.refresh_token = tokens['refresh_token']
+            print("Successfully authenticated using stored tokens!")
+        else:
+            # Get new authorization
+            auth_code = get_authorization_code(client.auth)
+            
+            # Exchange authorization code for tokens
+            print("\nExchanging authorization code for tokens...")
+            token_data = client.auth.exchange_code_for_tokens(auth_code)
+            print("Successfully authenticated!")
+            
+            # Save tokens
+            if hasattr(client.auth, 'access_token') and client.auth.access_token:
+                cred_manager.save_tokens(
+                    client.auth.access_token,
+                    client.auth.refresh_token if hasattr(client.auth, 'refresh_token') else None,
+                    expires_in=1800  # 30 minutes
+                )
         
         # Display paper trading status
         status = client.paper_trading_status()
