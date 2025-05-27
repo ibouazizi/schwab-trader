@@ -39,8 +39,18 @@ def get_authorization_code(auth):
     # Get authorization URL
     auth_url = auth.get_authorization_url()
     
+    # Try to copy to clipboard
+    try:
+        import pyperclip
+        pyperclip.copy(auth_url)
+        print(f"\n✓ Authorization URL copied to clipboard!")
+        print("You can paste it in your browser if the automatic opening doesn't work.\n")
+    except:
+        # pyperclip not installed or clipboard not available
+        print(f"\nAuthorization URL: {auth_url}\n")
+    
     # Open browser for user to authorize
-    print("\nOpening browser for authorization...")
+    print("Opening browser for authorization...")
     webbrowser.open(auth_url)
     
     # Wait for user to complete authorization

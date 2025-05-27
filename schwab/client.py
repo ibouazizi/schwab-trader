@@ -24,6 +24,8 @@ from .order_monitor import OrderMonitor
 from .models.execution import ExecutionReport
 from .models.quotes import QuoteResponse
 from .api.quotes import QuotesMixin
+from .models.transactions import Transaction, TransactionType
+from .models.user_preference import UserPreference
 
 class SchwabClient(QuotesMixin):
     """Client for interacting with the Schwab Trading API."""
@@ -201,6 +203,32 @@ class SchwabClient(QuotesMixin):
         """
         self._make_request("POST", f"/accounts/{account_number}/orders", json=order.model_dump(by_alias=True))
         
+    def preview_order(self, account_number: str, order: Order) -> Dict[str, Any]:
+        """Preview an order before placing it.
+        
+        Get estimated commission, fees, and other order details before placement.
+        
+        Args:
+            account_number: The encrypted account number
+            order: The order to preview
+            
+        Returns:
+            Dictionary containing order preview information including:
+            - estimatedCommission: Estimated commission for the order
+            - estimatedFees: Estimated fees
+            - estimatedTotal: Estimated total cost/proceeds
+            - orderValidation: Validation messages if any
+            
+        Raises:
+            requests.exceptions.RequestException: If the request fails
+        """
+        data = self._make_request(
+            "POST", 
+            f"/accounts/{account_number}/previewOrder", 
+            json=order.model_dump(by_alias=True)
+        )
+        return data
+        
     def replace_order(self, account_number: str, order_id: int, new_order: Order) -> None:
         """Replace an existing order with a new order.
         
@@ -345,6 +373,126 @@ class SchwabClient(QuotesMixin):
     def stop_monitoring(self) -> None:
         """Stop monitoring all orders."""
         self.order_monitor.stop_monitoring()
+        
+    # Transaction Methods
+    def get_transactions(
+        self,
+        account_number: str,
+        start_date: datetime,
+        end_date: datetime,
+        transaction_type: Optional[TransactionType] = None,
+        symbol: Optional[str] = None
+    ) -> List[Transaction]:
+        """Get transaction history for an account.
+        
+        Args:
+            account_number: The encrypted account number
+            start_date: Start date for transaction history
+            end_date: End date for transaction history
+            transaction_type: Optional filter by transaction type
+            symbol: Optional filter by symbol
+            
+        Returns:
+            List of transactions
+            
+        Raises:
+            requests.exceptions.RequestException: If the request fails
+        """
+        params = {
+            "startDate": start_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "endDate": end_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        }
+        
+        if transaction_type:
+            params["types"] = transaction_type.value
+            
+        if symbol:
+            params["symbol"] = symbol
+            
+        data = self._make_request("GET", f"/accounts/{account_number}/transactions", params=params)
+        return [Transaction(**txn) for txn in data]
+        
+    def get_transaction(self, account_number: str, transaction_id: int) -> Transaction:
+        """Get details of a specific transaction.
+        
+        Args:
+            account_number: The encrypted account number
+            transaction_id: The transaction ID
+            
+        Returns:
+            Transaction details
+            
+        Raises:
+            requests.exceptions.RequestException: If the request fails
+        """
+        data = self._make_request("GET", f"/accounts/{account_number}/transactions/{transaction_id}")
+        return Transaction(**data)
+        
+    # User Preferences Methods
+    def get_user_preferences(self) -> UserPreference:
+        """Get user trading preferences.
+        
+        Returns:
+            UserPreference object containing:
+            - accounts: List of user preference accounts
+            - streamer_info: List of streaming service information
+            - offers: List of available offers
+            
+        Raises:
+            requests.exceptions.RequestException: If the request fails
+        """
+        response = self._make_request("GET", "/userPreference")
+        return UserPreference(**response)
+        
+    def update_user_preferences(self, preferences: Dict[str, Any]) -> None:
+        """Update user trading preferences.
+        
+        Args:
+            preferences: Dictionary of preferences to update
+            
+        Returns:
+            None if successful
+            
+        Raises:
+            requests.exceptions.RequestException: If the request fails
+        """
+        self._make_request("PUT", "/userPreference", json=preferences)
+        
+    # All Orders Methods
+    def get_all_orders(
+        self,
+        from_entered_time: datetime,
+        to_entered_time: datetime,
+        max_results: Optional[int] = None,
+        status: Optional[str] = None
+    ) -> List[Order]:
+        """Get orders for all linked accounts.
+        
+        Args:
+            from_entered_time: Start time for orders
+            to_entered_time: End time for orders
+            max_results: Maximum number of orders to return
+            status: Optional filter by order status
+            
+        Returns:
+            List of orders across all accounts
+            
+        Raises:
+            requests.exceptions.RequestException: If the request fails
+        """
+        params = {
+            "fromEnteredTime": from_entered_time.strftime("%Y-%m-%dT%H:%M:%S.%fZ"),
+            "toEnteredTime": to_entered_time.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        }
+        
+        if max_results:
+            params["maxResults"] = max_results
+            
+        if status:
+            params["status"] = status
+            
+        data = self._make_request("GET", "/orders", params=params)
+        return [Order(**order) for order in data]
         
     def create_market_order(
         self,
@@ -629,6 +777,60 @@ class SchwabClient(QuotesMixin):
         }
         
         return self._make_request("GET", "/marketdata/v1/expirationchain", params=params)
+    
+    def get_price_history(self, symbol: str, 
+                         period_type: str = "day",
+                         period: Optional[int] = None,
+                         frequency_type: Optional[str] = None,
+                         frequency: Optional[int] = None,
+                         start_date: Optional[int] = None,
+                         end_date: Optional[int] = None,
+                         need_extended_hours_data: bool = False,
+                         need_previous_close: bool = False) -> Dict[str, Any]:
+        """
+        Get price history for a symbol.
+        
+        Args:
+            symbol: The symbol to get price history for
+            period_type: The chart period type (day, month, year, ytd)
+            period: The number of periods
+                - day: 1, 2, 3, 4, 5, 10
+                - month: 1, 2, 3, 6
+                - year: 1, 2, 3, 5, 10, 15, 20
+                - ytd: 1
+            frequency_type: The time frequency type
+                - day: minute
+                - month: daily, weekly
+                - year: daily, weekly, monthly
+                - ytd: daily, weekly
+            frequency: The time frequency (1, 5, 10, 15, 30 for minute)
+            start_date: Start date in milliseconds since epoch
+            end_date: End date in milliseconds since epoch
+            need_extended_hours_data: Include extended hours data
+            need_previous_close: Include previous close data
+            
+        Returns:
+            Dictionary containing candles with OHLC data
+        """
+        params = {
+            "symbol": symbol,
+            "periodType": period_type,
+            "needExtendedHoursData": need_extended_hours_data,
+            "needPreviousClose": need_previous_close
+        }
+        
+        if period is not None:
+            params["period"] = period
+        if frequency_type is not None:
+            params["frequencyType"] = frequency_type
+        if frequency is not None:
+            params["frequency"] = frequency
+        if start_date is not None:
+            params["startDate"] = start_date
+        if end_date is not None:
+            params["endDate"] = end_date
+            
+        return self._make_request("GET", "/marketdata/v1/pricehistory", params=params)
 def create_stop_limit_order(
     self,
     symbol: str,
@@ -899,3 +1101,19 @@ def create_market_on_close_order(
             ]
         )
 
+
+
+# Import and bind advanced methods
+from . import client_advanced_methods
+
+# Bind advanced methods to SchwabClient
+SchwabClient.create_multi_leg_option_order = client_advanced_methods.create_multi_leg_option_order
+SchwabClient.create_one_cancels_other_order = client_advanced_methods.create_one_cancels_other_order
+SchwabClient.create_one_triggers_other_order = client_advanced_methods.create_one_triggers_other_order
+SchwabClient.create_bracket_order = client_advanced_methods.create_bracket_order
+SchwabClient.get_portfolio_analysis = client_advanced_methods.get_portfolio_analysis
+SchwabClient.get_tax_lots = client_advanced_methods.get_tax_lots
+SchwabClient.place_order_with_tax_lot = client_advanced_methods.place_order_with_tax_lot
+SchwabClient.get_dividend_history = client_advanced_methods.get_dividend_history
+SchwabClient.get_cost_basis_summary = client_advanced_methods.get_cost_basis_summary
+SchwabClient.calculate_account_performance = client_advanced_methods.calculate_account_performance

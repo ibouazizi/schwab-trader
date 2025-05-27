@@ -929,22 +929,49 @@ class PortfolioManager:
                 if hasattr(sec_acct, 'type'):
                     account_type = sec_acct.type
                     
-                    if account_type == 'MARGIN' and hasattr(sec_acct, 'current_balances') and sec_acct.current_balances:
-                        # MarginBalance model
-                        balances = sec_acct.current_balances
-                        if hasattr(balances, 'available_funds') and balances.available_funds is not None:
-                            account_cash = Decimal(str(balances.available_funds))
-                            logger.info(f"Found margin account cash balance of {account_cash} for account {account_number}")
+                    if account_type == 'MARGIN':
+                        # For margin accounts, we need to check both current_balances and initial_balances
+                        # to find the actual cash balance without borrowing power
+                        
+                        # First try initial_balances which has more detailed cash information
+                        if hasattr(sec_acct, 'initial_balances') and sec_acct.initial_balances:
+                            balances = sec_acct.initial_balances
+                            # Use cash_balance which is actual cash without margin
+                            if hasattr(balances, 'cash_balance') and balances.cash_balance is not None:
+                                account_cash = Decimal(str(balances.cash_balance))
+                                logger.info(f"Found margin account cash_balance of {account_cash} for account {account_number}")
+                            # Fallback to total_cash if cash_balance not available
+                            elif hasattr(balances, 'total_cash') and balances.total_cash is not None:
+                                account_cash = Decimal(str(balances.total_cash))
+                                logger.info(f"Found margin account total_cash of {account_cash} for account {account_number}")
+                        
+                        # If initial_balances didn't work, try current_balances
+                        elif hasattr(sec_acct, 'current_balances') and sec_acct.current_balances:
+                            balances = sec_acct.current_balances
+                            # Note: MarginBalance model doesn't have cash_balance field
+                            # We should avoid using available_funds as it includes borrowing power
+                            # Instead, calculate cash from other fields if possible
+                            if hasattr(balances, 'margin_balance') and balances.margin_balance is not None:
+                                # margin_balance is the actual cash in the account
+                                account_cash = Decimal(str(balances.margin_balance))
+                                logger.info(f"Found margin account margin_balance (cash) of {account_cash} for account {account_number}")
                     
-                    elif account_type == 'CASH' and hasattr(sec_acct, 'current_balances') and sec_acct.current_balances:
-                        # CashBalance model
-                        balances = sec_acct.current_balances
-                        if hasattr(balances, 'cash_available_for_trading') and balances.cash_available_for_trading is not None:
-                            account_cash = Decimal(str(balances.cash_available_for_trading))
-                            logger.info(f"Found cash account balance of {account_cash} for account {account_number}")
-                        elif hasattr(balances, 'total_cash') and balances.total_cash is not None:
-                            account_cash = Decimal(str(balances.total_cash))
-                            logger.info(f"Found cash account total_cash of {account_cash} for account {account_number}")
+                    elif account_type == 'CASH':
+                        # For cash accounts, check both initial and current balances
+                        
+                        # First try initial_balances for cash_balance field
+                        if hasattr(sec_acct, 'initial_balances') and sec_acct.initial_balances:
+                            balances = sec_acct.initial_balances
+                            if hasattr(balances, 'cash_balance') and balances.cash_balance is not None:
+                                account_cash = Decimal(str(balances.cash_balance))
+                                logger.info(f"Found cash account cash_balance of {account_cash} for account {account_number}")
+                        
+                        # If initial_balances didn't work, use current_balances
+                        elif hasattr(sec_acct, 'current_balances') and sec_acct.current_balances:
+                            balances = sec_acct.current_balances
+                            if hasattr(balances, 'cash_available_for_trading') and balances.cash_available_for_trading is not None:
+                                account_cash = Decimal(str(balances.cash_available_for_trading))
+                                logger.info(f"Found cash account cash_available_for_trading of {account_cash} for account {account_number}")
                 
                 if account_cash == 0:
                     logger.debug(f"No positive cash balance found for account {account_number}")
