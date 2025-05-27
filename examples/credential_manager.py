@@ -40,9 +40,12 @@ class CredentialManager:
         c.execute('''
             CREATE TABLE IF NOT EXISTS credentials (
                 id INTEGER PRIMARY KEY,
+                name TEXT UNIQUE,
+                client_id TEXT,
+                client_secret TEXT,
+                redirect_uri TEXT,
                 trading_client_id TEXT NOT NULL,
                 trading_client_secret TEXT NOT NULL,
-                redirect_uri TEXT NOT NULL,
                 market_data_client_id TEXT,
                 market_data_client_secret TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -92,11 +95,11 @@ class CredentialManager:
             if api_type == "trading":
                 c.execute("""
                     INSERT INTO credentials 
-                    (trading_client_id, trading_client_secret, redirect_uri)
-                    VALUES (?, ?, ?)
-                """, (client_id, client_secret, redirect_uri))
+                    (name, trading_client_id, trading_client_secret, redirect_uri)
+                    VALUES (?, ?, ?, ?)
+                """, ('default', client_id, client_secret, redirect_uri))
             else:
-                # Update to support market data credentials
+                # Update existing record with market data credentials
                 c.execute("""
                     UPDATE credentials 
                     SET market_data_client_id = ?, market_data_client_secret = ?
@@ -110,6 +113,48 @@ class CredentialManager:
             
         except Exception as e:
             logger.error(f"Error saving credentials: {e}")
+            return False
+    
+    def save_all_credentials(self, trading_client_id: str, trading_client_secret: str,
+                           redirect_uri: str = "https://localhost:8443/callback",
+                           market_data_client_id: str = None, 
+                           market_data_client_secret: str = None) -> bool:
+        """
+        Save both trading and market data credentials at once.
+        
+        Args:
+            trading_client_id: Trading API client ID
+            trading_client_secret: Trading API client secret
+            redirect_uri: OAuth redirect URI
+            market_data_client_id: Market Data API client ID (optional)
+            market_data_client_secret: Market Data API client secret (optional)
+            
+        Returns:
+            bool: True if saved successfully
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+            
+            # Clear existing credentials
+            c.execute("DELETE FROM credentials")
+            
+            # Insert all credentials
+            c.execute("""
+                INSERT INTO credentials 
+                (name, trading_client_id, trading_client_secret, redirect_uri,
+                 market_data_client_id, market_data_client_secret)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, ('default', trading_client_id, trading_client_secret, redirect_uri,
+                  market_data_client_id, market_data_client_secret))
+            
+            conn.commit()
+            conn.close()
+            logger.info("Saved all credentials successfully")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error saving all credentials: {e}")
             return False
     
     def get_credentials(self, api_type: str = "trading") -> Optional[Dict[str, str]]:
@@ -133,17 +178,35 @@ class CredentialManager:
             if not row:
                 return None
             
+            # IMPORTANT: Column order may vary based on when database was created
+            # Current mapping (verify with PRAGMA table_info if issues arise):
+            # 0: id, 1: name, 2: client_id, 3: client_secret, 4: redirect_uri
+            # 5: created_at, 6: trading_client_id, 7: trading_client_secret
+            # 8: market_data_client_id, 9: market_data_client_secret
+            
             if api_type == "trading":
-                return {
-                    'client_id': row[1],
-                    'client_secret': row[2],
-                    'redirect_uri': row[3]
-                }
-            else:
-                return {
-                    'client_id': row[4],
-                    'client_secret': row[5]
-                } if row[4] and row[5] else None
+                # Check new format first (trading_client_id and trading_client_secret)
+                if len(row) > 7 and row[6] and row[7]:
+                    return {
+                        'client_id': row[6],
+                        'client_secret': row[7],
+                        'redirect_uri': row[4] or 'https://localhost:8443/callback'
+                    }
+                # Fallback to old format (client_id and client_secret)
+                elif row[2] and row[3]:
+                    return {
+                        'client_id': row[2],
+                        'client_secret': row[3],
+                        'redirect_uri': row[4] or 'https://localhost:8443/callback'
+                    }
+            else:  # market_data
+                if len(row) > 9 and row[8] and row[9]:
+                    return {
+                        'client_id': row[8],
+                        'client_secret': row[9]
+                    }
+                
+            return None
                 
         except Exception as e:
             logger.error(f"Error retrieving credentials: {e}")

@@ -369,7 +369,7 @@ class AutocompleteEntry(ctk.CTkEntry):
 
 
 class PriceChartWidget(ctk.CTkFrame):
-    """Real-time price chart widget."""
+    """Enhanced price chart widget with candlestick and bar chart support."""
     
     def __init__(self, parent, **kwargs):
         super().__init__(parent, **kwargs)
@@ -379,103 +379,316 @@ class PriceChartWidget(ctk.CTkFrame):
         
         self.figure = Figure(figsize=(8, 4), dpi=100)
         self.figure.patch.set_facecolor('#1a1a1a')
-        self.ax = self.figure.add_subplot(111)
-        self.ax.set_facecolor('#1a1a1a')
+        
+        # Create two subplots - one for price, one for volume
+        self.ax_price = self.figure.add_subplot(211)
+        self.ax_volume = self.figure.add_subplot(212, sharex=self.ax_price)
+        
+        # Configure axes
+        for ax in [self.ax_price, self.ax_volume]:
+            ax.set_facecolor('#1a1a1a')
+        
+        # Adjust spacing
+        self.figure.subplots_adjust(hspace=0.1)
         
         self.canvas = FigureCanvasTkAgg(self.figure, self)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
         
+        # Store both simple and OHLCV data
         self.price_data = {"time": [], "price": [], "volume": []}
+        self.ohlcv_data = {"time": [], "open": [], "high": [], "low": [], "close": [], "volume": []}
         self.symbol = ""
+        self.chart_type = "Line"
+        self.timeframe = "1D"
         
-    def update_chart(self, symbol, time, price, volume=0):
+    def set_chart_type(self, chart_type):
+        """Set the chart type (Line, Candle, Bar)."""
+        self.chart_type = chart_type
+        self.redraw()
+        
+    def set_timeframe(self, timeframe):
+        """Set the timeframe for the chart."""
+        self.timeframe = timeframe
+        
+    def update_chart(self, symbol, time, price, volume=0, open_price=None, high=None, low=None):
         """Update chart with new price data."""
         self.symbol = symbol
         self.price_data["time"].append(time)
         self.price_data["price"].append(price)
         self.price_data["volume"].append(volume)
         
+        # For OHLCV data
+        if open_price is not None:
+            self.ohlcv_data["time"].append(time)
+            self.ohlcv_data["open"].append(open_price)
+            self.ohlcv_data["high"].append(high or price)
+            self.ohlcv_data["low"].append(low or price)
+            self.ohlcv_data["close"].append(price)
+            self.ohlcv_data["volume"].append(volume)
+        
         # Keep only last 500 points for real-time data
         max_points = 500
         if len(self.price_data["time"]) > max_points:
             for key in self.price_data:
                 self.price_data[key] = self.price_data[key][-max_points:]
+            for key in self.ohlcv_data:
+                self.ohlcv_data[key] = self.ohlcv_data[key][-max_points:]
         
         self.redraw()
     
-    def set_historical_data(self, symbol, times, prices, volumes=None):
+    def set_historical_data(self, symbol, times, prices, volumes=None, opens=None, highs=None, lows=None):
         """Set historical data for the chart."""
         self.symbol = symbol
         self.price_data["time"] = times.copy()
         self.price_data["price"] = prices.copy()
         self.price_data["volume"] = volumes.copy() if volumes else [0] * len(times)
+        
+        # Set OHLCV data if available
+        if opens and highs and lows:
+            self.ohlcv_data["time"] = times.copy()
+            self.ohlcv_data["open"] = opens.copy()
+            self.ohlcv_data["high"] = highs.copy()
+            self.ohlcv_data["low"] = lows.copy()
+            self.ohlcv_data["close"] = prices.copy()
+            self.ohlcv_data["volume"] = volumes.copy() if volumes else [0] * len(times)
+        else:
+            # Generate dummy OHLCV from line data
+            self.generate_ohlcv_from_line()
+            
         self.redraw()
         
-    def redraw(self):
-        """Redraw the chart."""
-        self.ax.clear()
-        
+    def generate_ohlcv_from_line(self):
+        """Generate OHLCV data from line price data for candlestick/bar charts."""
         if not self.price_data["time"]:
+            return
+            
+        # Group by time periods based on data density
+        from collections import defaultdict
+        import numpy as np
+        
+        grouped = defaultdict(list)
+        times = []
+        
+        # Simple grouping - could be enhanced based on timeframe
+        for i, (time, price) in enumerate(zip(self.price_data["time"], self.price_data["price"])):
+            # Group every 5 points for now
+            group_idx = i // 5
+            grouped[group_idx].append((time, price))
+            
+        self.ohlcv_data = {"time": [], "open": [], "high": [], "low": [], "close": [], "volume": []}
+        
+        for group_idx in sorted(grouped.keys()):
+            points = grouped[group_idx]
+            if points:
+                times = [p[0] for p in points]
+                prices = [p[1] for p in points]
+                
+                self.ohlcv_data["time"].append(times[len(times)//2])  # Middle time
+                self.ohlcv_data["open"].append(prices[0])
+                self.ohlcv_data["high"].append(max(prices))
+                self.ohlcv_data["low"].append(min(prices))
+                self.ohlcv_data["close"].append(prices[-1])
+                self.ohlcv_data["volume"].append(sum(self.price_data["volume"][group_idx*5:(group_idx+1)*5]))
+        
+    def redraw(self):
+        """Redraw the chart based on chart type."""
+        self.ax_price.clear()
+        self.ax_volume.clear()
+        
+        if not self.price_data["time"] and not self.ohlcv_data["time"]:
             # Show message when no data
-            self.ax.text(0.5, 0.5, 'No data available\nClick "Load" to fetch data', 
-                        transform=self.ax.transAxes,
+            self.ax_price.text(0.5, 0.5, 'No data available\nClick "Load" to fetch data', 
+                        transform=self.ax_price.transAxes,
                         ha='center', va='center',
                         fontsize=14, color='white')
-            self.ax.set_title(f"{self.symbol or 'Select Symbol'}", color='white', fontsize=12)
+            self.ax_price.set_title(f"{self.symbol or 'Select Symbol'} - {self.timeframe}", color='white', fontsize=12)
             self.figure.tight_layout()
             self.canvas.draw()
             return
         
-        # Check if we have enough data points
-        if len(self.price_data["time"]) < 2:
-            self.ax.text(0.5, 0.5, 'Collecting price data...\nReal-time updates will appear here', 
-                        transform=self.ax.transAxes,
-                        ha='center', va='center',
-                        fontsize=12, color='white')
+        # Draw based on chart type
+        if self.chart_type == "Line":
+            self._draw_line_chart()
+        elif self.chart_type == "Candle":
+            self._draw_candlestick_chart()
+        elif self.chart_type == "Bar":
+            self._draw_bar_chart()
             
-        # Plot price
-        self.ax.plot(self.price_data["time"], self.price_data["price"], 
-                    color='#00ff88', linewidth=2, label='Price')
-        
-        # Add moving average
-        if len(self.price_data["price"]) > 20:
-            try:
-                import pandas as pd
-                ma20 = pd.Series(self.price_data["price"]).rolling(20).mean()
-                self.ax.plot(self.price_data["time"], ma20, 
-                            color='#ff9900', linewidth=1, label='MA20', alpha=0.7)
-            except ImportError:
-                # Fallback to simple moving average without pandas
-                ma20 = []
-                prices = self.price_data["price"]
-                for i in range(len(prices)):
-                    if i < 19:
-                        ma20.append(prices[i])
-                    else:
-                        ma20.append(sum(prices[i-19:i+1]) / 20)
-                self.ax.plot(self.price_data["time"], ma20, 
-                            color='#ff9900', linewidth=1, label='MA20', alpha=0.7)
+        # Draw volume bars
+        self._draw_volume_bars()
         
         # Formatting
-        self.ax.set_title(f"{self.symbol} Price Chart", color='white', fontsize=12)
-        self.ax.set_xlabel('Time', color='white')
-        self.ax.set_ylabel('Price ($)', color='white')
-        self.ax.tick_params(colors='white')
-        self.ax.grid(True, alpha=0.3)
-        self.ax.legend(loc='upper left')
+        self.ax_price.set_title(f"{self.symbol} - {self.chart_type} Chart - {self.timeframe}", color='white', fontsize=12)
+        self.ax_price.set_ylabel('Price ($)', color='white')
+        self.ax_price.tick_params(colors='white')
+        self.ax_price.grid(True, alpha=0.3)
+        self.ax_price.legend(loc='upper left')
+        
+        # Volume formatting
+        self.ax_volume.set_ylabel('Volume', color='white')
+        self.ax_volume.set_xlabel('Time', color='white')
+        self.ax_volume.tick_params(colors='white')
+        self.ax_volume.grid(True, alpha=0.3)
         
         # Format x-axis dates
-        if len(self.price_data["time"]) > 1:
+        if self.price_data["time"] or self.ohlcv_data["time"]:
             self.figure.autofmt_xdate()
             
         self.figure.tight_layout()
         self.canvas.draw()
         
+    def _draw_line_chart(self):
+        """Draw line chart."""
+        if not self.price_data["time"]:
+            return
+            
+        self.ax_price.plot(self.price_data["time"], self.price_data["price"], 
+                    color='#00ff88', linewidth=2, label='Price')
+        
+        # Add moving averages
+        self._add_moving_averages()
+        
+    def _draw_candlestick_chart(self):
+        """Draw candlestick chart."""
+        if not self.ohlcv_data["time"]:
+            if self.price_data["time"]:
+                # Fallback to line chart
+                self._draw_line_chart()
+            return
+            
+        # Draw candlesticks
+        for i in range(len(self.ohlcv_data["time"])):
+            time = self.ohlcv_data["time"][i]
+            open_price = self.ohlcv_data["open"][i]
+            high = self.ohlcv_data["high"][i]
+            low = self.ohlcv_data["low"][i]
+            close = self.ohlcv_data["close"][i]
+            
+            # Determine color
+            color = '#00ff88' if close >= open_price else '#ff4444'
+            
+            # Draw high-low line
+            self.ax_price.plot([time, time], [low, high], color=color, linewidth=1)
+            
+            # Draw open-close rectangle
+            height = abs(close - open_price)
+            bottom = min(open_price, close)
+            
+            # Width calculation - use 0.6 of the time difference
+            if i < len(self.ohlcv_data["time"]) - 1:
+                width = (self.ohlcv_data["time"][i+1] - time).total_seconds() * 0.6 / 86400
+            else:
+                width = 0.0007  # Default width for last candle
+                
+            from matplotlib.patches import Rectangle
+            rect = Rectangle((mdates.date2num(time) - width/2, bottom), width, height,
+                           facecolor=color, edgecolor=color, alpha=0.8)
+            self.ax_price.add_patch(rect)
+            
+        # Add moving averages
+        self._add_moving_averages(use_close=True)
+        
+    def _draw_bar_chart(self):
+        """Draw OHLC bar chart."""
+        if not self.ohlcv_data["time"]:
+            if self.price_data["time"]:
+                # Fallback to line chart
+                self._draw_line_chart()
+            return
+            
+        # Draw OHLC bars
+        for i in range(len(self.ohlcv_data["time"])):
+            time = mdates.date2num(self.ohlcv_data["time"][i])
+            open_price = self.ohlcv_data["open"][i]
+            high = self.ohlcv_data["high"][i]
+            low = self.ohlcv_data["low"][i]
+            close = self.ohlcv_data["close"][i]
+            
+            # Determine color
+            color = '#00ff88' if close >= open_price else '#ff4444'
+            
+            # Draw high-low line
+            self.ax_price.plot([time, time], [low, high], color=color, linewidth=1.5)
+            
+            # Draw open tick (left)
+            tick_width = 0.0003
+            self.ax_price.plot([time - tick_width, time], [open_price, open_price], 
+                             color=color, linewidth=1.5)
+            
+            # Draw close tick (right)
+            self.ax_price.plot([time, time + tick_width], [close, close], 
+                             color=color, linewidth=1.5)
+            
+        # Add moving averages
+        self._add_moving_averages(use_close=True)
+        
+    def _add_moving_averages(self, use_close=False):
+        """Add moving averages to the chart."""
+        if use_close and self.ohlcv_data["close"]:
+            prices = self.ohlcv_data["close"]
+            times = self.ohlcv_data["time"]
+        else:
+            prices = self.price_data["price"]
+            times = self.price_data["time"]
+            
+        if len(prices) > 20:
+            try:
+                import pandas as pd
+                ma20 = pd.Series(prices).rolling(20).mean()
+                self.ax_price.plot(times, ma20, 
+                            color='#ff9900', linewidth=1, label='MA20', alpha=0.7)
+                            
+                if len(prices) > 50:
+                    ma50 = pd.Series(prices).rolling(50).mean()
+                    self.ax_price.plot(times, ma50, 
+                                color='#00aaff', linewidth=1, label='MA50', alpha=0.7)
+            except ImportError:
+                # Simple moving average without pandas
+                ma20 = []
+                for i in range(len(prices)):
+                    if i < 19:
+                        ma20.append(prices[i])
+                    else:
+                        ma20.append(sum(prices[i-19:i+1]) / 20)
+                self.ax_price.plot(times, ma20, 
+                            color='#ff9900', linewidth=1, label='MA20', alpha=0.7)
+                            
+    def _draw_volume_bars(self):
+        """Draw volume bars."""
+        if self.ohlcv_data["volume"] and len(self.ohlcv_data["volume"]) > 0:
+            volumes = self.ohlcv_data["volume"]
+            times = self.ohlcv_data["time"]
+            
+            # Color based on price movement
+            colors = []
+            for i in range(len(volumes)):
+                if i == 0 or self.ohlcv_data["close"][i] >= self.ohlcv_data["open"][i]:
+                    colors.append('#00ff8844')
+                else:
+                    colors.append('#ff444444')
+                    
+            # Calculate bar width
+            if len(times) > 1:
+                width = (times[1] - times[0]).total_seconds() * 0.8 / 86400
+            else:
+                width = 0.0007
+                
+            # Draw bars
+            for i, (time, volume, color) in enumerate(zip(times, volumes, colors)):
+                self.ax_volume.bar(time, volume, width=width, color=color, alpha=0.8)
+                
+        elif self.price_data["volume"]:
+            # Simple volume bars for line chart
+            self.ax_volume.bar(self.price_data["time"], self.price_data["volume"], 
+                             color='#00aaff44', alpha=0.8)
+        
     def clear_chart(self):
         """Clear the chart data."""
         self.price_data = {"time": [], "price": [], "volume": []}
+        self.ohlcv_data = {"time": [], "open": [], "high": [], "low": [], "close": [], "volume": []}
         self.symbol = ""
-        self.ax.clear()
+        self.ax_price.clear()
+        self.ax_volume.clear()
         self.canvas.draw()
 
 
@@ -1248,6 +1461,7 @@ class EnhancedSchwabPortfolioGUI(ctk.CTk):
         self.stop_updates = threading.Event()
         self.update_queue = queue.Queue()
         self.watched_symbols = set()
+        self.previous_close_prices = {}  # Store previous close prices
         self.preferences = self.load_preferences()
         
         # Initialize managers
@@ -1569,7 +1783,8 @@ class EnhancedSchwabPortfolioGUI(ctk.CTk):
         summary_frame = ctk.CTkFrame(self.portfolio_tab)
         summary_frame.pack(fill="x", pady=10)
         
-        # Create summary metrics
+        # Create summary metrics with label references
+        self.portfolio_labels = {}  # Store references to value labels
         metrics = [
             ("Cash", "$0.00"),
             ("Securities", "$0.00"),
@@ -1589,11 +1804,15 @@ class EnhancedSchwabPortfolioGUI(ctk.CTk):
                 text_color="#888888"
             ).pack(pady=(10, 5))
             
-            ctk.CTkLabel(
+            value_label = ctk.CTkLabel(
                 card,
                 text=value,
                 font=("Roboto", 24, "bold")
-            ).pack(pady=(0, 10))
+            )
+            value_label.pack(pady=(0, 10))
+            
+            # Store reference to the value label
+            self.portfolio_labels[label.lower()] = value_label
             
         # Allocation chart
         chart_frame = ctk.CTkFrame(self.portfolio_tab)
@@ -1728,7 +1947,8 @@ class EnhancedSchwabPortfolioGUI(ctk.CTk):
             )
             btn.pack(side="left", padx=2)
             
-        # Chart type
+        # Chart type selector
+        ctk.CTkLabel(controls_frame, text="Chart Type:").pack(side="right", padx=(10, 5))
         self.chart_type_var = ctk.StringVar(value="Line")
         chart_types = ctk.CTkOptionMenu(
             controls_frame,
@@ -1918,18 +2138,24 @@ A professional-grade trading interface for Charles Schwab.
                     client_id TEXT,
                     client_secret TEXT,
                     redirect_uri TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    trading_client_id TEXT,
+                    trading_client_secret TEXT,
+                    market_data_client_id TEXT,
+                    market_data_client_secret TEXT
                 )
             """)
             
             c.execute("""
                 CREATE TABLE IF NOT EXISTS tokens (
                     id INTEGER PRIMARY KEY,
-                    api_type TEXT,
-                    access_token TEXT,
+                    api_type TEXT NOT NULL DEFAULT 'trading',
+                    access_token TEXT NOT NULL,
                     refresh_token TEXT,
+                    expiry TEXT NOT NULL,
+                    expires_at TIMESTAMP,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    expires_at TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
             
@@ -2047,12 +2273,15 @@ A professional-grade trading interface for Charles Schwab.
             
             if creds:
                 # Try to connect with saved credentials
+                # Column mapping: 0=id, 1=name, 2=client_id, 3=client_secret, 4=redirect_uri, 
+                # 5=created_at, 6=trading_client_id, 7=trading_client_secret, 
+                # 8=market_data_client_id, 9=market_data_client_secret
                 self.connect_with_credentials(
-                    creds[1],  # trading_client_id
-                    creds[2],  # trading_client_secret
-                    creds[3],  # redirect_uri
-                    creds[4],  # market_data_client_id
-                    creds[5]   # market_data_client_secret
+                    creds[6] or creds[2],  # trading_client_id (fallback to client_id)
+                    creds[7] or creds[3],  # trading_client_secret (fallback to client_secret)
+                    creds[4] or 'https://localhost:8443/callback',  # redirect_uri
+                    creds[8],  # market_data_client_id
+                    creds[9]   # market_data_client_secret
                 )
             else:
                 # No credentials found, show authentication dialog
@@ -2068,7 +2297,7 @@ A professional-grade trading interface for Charles Schwab.
         """Show authentication dialog for entering OAuth credentials."""
         auth_dialog = ctk.CTkToplevel(self)
         auth_dialog.title("Schwab API Authentication")
-        auth_dialog.geometry("600x500")
+        auth_dialog.geometry("600x600")
         auth_dialog.transient(self)
         auth_dialog.grab_set()
         
@@ -2096,7 +2325,7 @@ A professional-grade trading interface for Charles Schwab.
             "To use this application, you need Schwab API credentials.\n\n"
             "1. Go to https://developer.schwab.com\n"
             "2. Create an app to get your Client ID and Secret\n"
-            "3. Set redirect URI to: https://localhost:8443/callback\n"
+            "3. Set redirect URI to your registered callback URL\n"
             "4. Enter your credentials below"
         )
         instructions.configure(state="disabled")
@@ -2253,6 +2482,8 @@ A professional-grade trading interface for Charles Schwab.
                         logger.info("Token refreshed successfully")
                     except Exception as e:
                         logger.error(f"Token refresh failed: {e}")
+                        # Clear invalid tokens
+                        self.clear_tokens()
                         # Refresh failed, need new auth
                         ToastNotification.show_toast(
                             self, 
@@ -2351,6 +2582,7 @@ A professional-grade trading interface for Charles Schwab.
         instructions.insert("1.0", 
             "Please follow these steps to authenticate:\n\n"
             "1. Click 'Open Browser' to open the Schwab login page\n"
+            "   OR click 'Copy URL to Clipboard' to copy the URL and paste it in your browser\n"
             "2. Log in with your Schwab credentials\n"
             "3. Authorize the application\n"
             "4. You'll be redirected to a page that says 'connection refused'\n"
@@ -2374,6 +2606,23 @@ A professional-grade trading interface for Charles Schwab.
         def open_browser():
             """Open the authorization URL in browser."""
             webbrowser.open(auth_url)
+        
+        def copy_to_clipboard():
+            """Copy the authorization URL to clipboard."""
+            try:
+                oauth_dialog.clipboard_clear()
+                oauth_dialog.clipboard_append(auth_url)
+                oauth_dialog.update()  # Required to finalize clipboard
+                
+                # Show success notification
+                self.show_info("✓ URL copied to clipboard! You can now paste it in your browser.", 4000)
+                
+                # Also update the button text temporarily
+                copy_button.configure(text="✓ Copied!")
+                oauth_dialog.after(2000, lambda: copy_button.configure(text="Copy URL to Clipboard"))
+            except Exception as e:
+                logger.error(f"Failed to copy to clipboard: {e}")
+                messagebox.showerror("Error", "Failed to copy URL to clipboard")
         
         def complete_auth():
             """Complete the authentication with the callback URL."""
@@ -2417,6 +2666,17 @@ A professional-grade trading interface for Charles Schwab.
             width=150
         )
         browser_button.pack(side="left", padx=(0, 10))
+        
+        # Copy URL button
+        copy_button = ctk.CTkButton(
+            button_frame,
+            text="Copy URL to Clipboard",
+            command=copy_to_clipboard,
+            width=180,
+            fg_color="blue",
+            hover_color="darkblue"
+        )
+        copy_button.pack(side="left", padx=(0, 10))
         
         # Complete button
         complete_button = ctk.CTkButton(
@@ -2465,6 +2725,18 @@ A professional-grade trading interface for Charles Schwab.
             logger.error(f"Failed to save tokens: {e}")
             raise
     
+    def clear_tokens(self):
+        """Clear all saved tokens from database."""
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            c.execute("DELETE FROM tokens")
+            conn.commit()
+            conn.close()
+            logger.info("Tokens cleared successfully")
+        except Exception as e:
+            logger.error(f"Failed to clear tokens: {e}")
+    
     def finalize_connection(self):
         """Finalize the connection after successful authentication."""
         try:
@@ -2477,7 +2749,11 @@ A professional-grade trading interface for Charles Schwab.
             
             if creds:
                 # Initialize client with authenticated auth
-                self.client = SchwabClient(creds[1], creds[2], creds[3], auth=self.auth)
+                # Use trading credentials from correct columns
+                trading_id = creds[6] or creds[2]
+                trading_secret = creds[7] or creds[3]
+                redirect_uri = creds[4] or 'https://localhost:8443/callback'
+                self.client = SchwabClient(trading_id, trading_secret, redirect_uri, auth=self.auth)
                 
                 # Get accounts
                 account_numbers = self.client.get_account_numbers()
@@ -3244,21 +3520,12 @@ A professional-grade trading interface for Charles Schwab.
                             price = q.get('last', 0) or q.get('lastPrice', 0)
                             
                         if price > 0:
-                            # Initialize with current price
-                            current_time = datetime.now()
+                            # Clear and set symbol
+                            self.main_chart.clear_chart()
+                            self.main_chart.symbol = symbol
                             
-                            # Check if we have historical data
-                            if symbol in self.price_history:
-                                times, prices = zip(*self.price_history[symbol])
-                                self.main_chart.set_historical_data(symbol, list(times), list(prices))
-                                # Add current price
-                                self.main_chart.update_chart(symbol, current_time, price)
-                            else:
-                                # Start with just current price
-                                self.main_chart.update_chart(symbol, current_time, price)
-                                self.price_history[symbol] = [(current_time, price)]
-                                
-                            ToastNotification.show_toast(self, f"Loaded data for {symbol}", "success")
+                            # Fetch historical data based on current timeframe
+                            self._generate_historical_data(self.timeframe_var.get())
                             
                             # Add to watchlist if not already there
                             if symbol not in self.watched_symbols:
@@ -3274,13 +3541,109 @@ A professional-grade trading interface for Charles Schwab.
     def change_timeframe(self, timeframe):
         """Change chart timeframe."""
         self.timeframe_var.set(timeframe)
-        # For now, just update the label - real implementation would filter data
-        ToastNotification.show_toast(self, f"Timeframe: {timeframe} (Note: Historical data limited)", "info")
+        self.main_chart.set_timeframe(timeframe)
+        
+        # Generate sample historical data based on timeframe
+        self._generate_historical_data(timeframe)
+        
+        # Reload chart if we have a symbol
+        if self.chart_symbol_var.get():
+            self.load_chart_data()
+            
+        ToastNotification.show_toast(self, f"Timeframe changed to {timeframe}", "info")
         
     def change_chart_type(self, chart_type):
         """Change chart type."""
-        # Note: Currently only line charts are implemented
-        ToastNotification.show_toast(self, f"Chart type: {chart_type} (Currently only Line is supported)", "info")
+        self.main_chart.set_chart_type(chart_type)
+        ToastNotification.show_toast(self, f"Chart type changed to {chart_type}", "info")
+        
+    def _generate_historical_data(self, timeframe):
+        """Fetch real historical data from Schwab API based on timeframe."""
+        symbol = self.chart_symbol_var.get().strip().upper()
+        if not symbol or not self.client:
+            return
+            
+        try:
+            # Map timeframe to API parameters
+            timeframe_config = {
+                "1D": {"period_type": "day", "period": 1, "frequency_type": "minute", "frequency": 5},
+                "5D": {"period_type": "day", "period": 5, "frequency_type": "minute", "frequency": 30},
+                "1M": {"period_type": "month", "period": 1, "frequency_type": "daily", "frequency": 1},
+                "3M": {"period_type": "month", "period": 3, "frequency_type": "daily", "frequency": 1},
+                "6M": {"period_type": "month", "period": 6, "frequency_type": "weekly", "frequency": 1},
+                "1Y": {"period_type": "year", "period": 1, "frequency_type": "daily", "frequency": 1},
+                "5Y": {"period_type": "year", "period": 5, "frequency_type": "weekly", "frequency": 1}
+            }
+            
+            if timeframe not in timeframe_config:
+                logger.error(f"Invalid timeframe: {timeframe}")
+                return
+                
+            config = timeframe_config[timeframe]
+            
+            # Fetch historical data from API
+            history_response = self.client.get_price_history(
+                symbol=symbol,
+                period_type=config["period_type"],
+                period=config["period"],
+                frequency_type=config["frequency_type"],
+                frequency=config["frequency"],
+                need_extended_hours_data=False,
+                need_previous_close=True
+            )
+            
+            # Parse the response
+            if not history_response or "candles" not in history_response:
+                logger.warning(f"No historical data returned for {symbol}")
+                return
+                
+            candles = history_response.get("candles", [])
+            if not candles:
+                logger.warning(f"Empty candles list for {symbol}")
+                return
+                
+            # Extract OHLCV data
+            times = []
+            opens = []
+            highs = []
+            lows = []
+            closes = []
+            volumes = []
+            
+            for candle in candles:
+                # Convert epoch milliseconds to datetime
+                timestamp = candle.get("datetime", 0) / 1000  # Convert to seconds
+                time = datetime.fromtimestamp(timestamp)
+                
+                times.append(time)
+                opens.append(candle.get("open", 0))
+                highs.append(candle.get("high", 0))
+                lows.append(candle.get("low", 0))
+                closes.append(candle.get("close", 0))
+                volumes.append(candle.get("volume", 0))
+                
+            # Set the historical data
+            self.main_chart.set_historical_data(
+                symbol, times, closes, volumes, opens, highs, lows
+            )
+            
+            # Store previous close if available
+            if "previousClose" in history_response:
+                self.previous_close_prices[symbol] = history_response["previousClose"]
+                
+            ToastNotification.show_toast(
+                self, 
+                f"Loaded {len(candles)} data points for {symbol} ({timeframe})", 
+                "success"
+            )
+            
+        except Exception as e:
+            logger.error(f"Error fetching historical data: {e}")
+            ToastNotification.show_toast(
+                self, 
+                f"Error loading historical data: {str(e)}", 
+                "error"
+            )
         
     def change_date_range(self, range_name):
         """Change history date range."""
@@ -3296,6 +3659,26 @@ A professional-grade trading interface for Charles Schwab.
         try:
             # Get portfolio summary
             summary = self.portfolio_manager.get_portfolio_summary() if not data else data
+            
+            # Update portfolio value labels
+            if hasattr(self, 'portfolio_labels'):
+                total_cash = float(summary.get('total_cash', 0))
+                total_equity = float(summary.get('total_equity', 0))
+                total_value = float(summary.get('total_value', 0))
+                
+                # Calculate options value (if available in portfolio)
+                options_value = 0.0
+                positions_by_symbol = summary.get('positions_by_symbol', {})
+                for symbol, pos_data in positions_by_symbol.items():
+                    asset_type = pos_data.get('asset_type', '')
+                    if asset_type == 'OPTION':
+                        options_value += float(pos_data.get('market_value', 0))
+                
+                # Update labels
+                self.portfolio_labels['cash'].configure(text=f"${total_cash:,.2f}")
+                self.portfolio_labels['securities'].configure(text=f"${total_equity:,.2f}")
+                self.portfolio_labels['options'].configure(text=f"${options_value:,.2f}")
+                self.portfolio_labels['total'].configure(text=f"${total_value:,.2f}")
             
             # Calculate additional metrics
             total_value = float(summary.get('total_value', 0))

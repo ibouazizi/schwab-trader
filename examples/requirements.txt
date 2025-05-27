@@ -24,6 +24,7 @@ Pillow>=10.0.0
 # Additional utilities
 python-dateutil>=2.8.0
 pytz>=2023.3
+pyperclip>=1.8.0  # Clipboard functionality
 
 # For real-time data
 websocket-client>=1.6.0
