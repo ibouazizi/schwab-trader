@@ -125,7 +125,7 @@ class PortfolioManager:
             # Extract positions from securities_account
             sec_acct = getattr(account, 'securities_account', None)
             if sec_acct is not None and hasattr(sec_acct, 'positions'):
-                positions_list = getattr(sec_acct, 'positions', [])
+                positions_list = getattr(sec_acct, 'positions', None) or []
                 
                 for position in positions_list:
                     symbol = self._extract_symbol_from_position(position)
@@ -164,7 +164,7 @@ class PortfolioManager:
             # Extract positions from securities_account
             sec_acct = getattr(account, 'securities_account', None)
             if sec_acct is not None and hasattr(sec_acct, 'positions'):
-                positions_list = getattr(sec_acct, 'positions', [])
+                positions_list = getattr(sec_acct, 'positions', None) or []
                 
                 for position in positions_list:
                     symbol = self._extract_symbol_from_position(position)
@@ -198,7 +198,7 @@ class PortfolioManager:
                     # Extract positions from securities_account
                     sec_acct = getattr(account, 'securities_account', None)
                     if sec_acct is not None:
-                        positions_list = getattr(sec_acct, 'positions', [])
+                        positions_list = getattr(sec_acct, 'positions', None) or []
                         
                         if positions_list:
                             logger.info(f"Found {len(positions_list)} positions in securities_account")
@@ -1336,7 +1336,7 @@ class PortfolioManager:
                     self._positions[account_number] = {}
                     sec_acct = getattr(account, 'securities_account', None)
                     if sec_acct is not None and hasattr(sec_acct, 'positions'):
-                        positions_list = getattr(sec_acct, 'positions', [])
+                        positions_list = getattr(sec_acct, 'positions', None) or []
                         for position in positions_list:
                             symbol = self._extract_symbol_from_position(position)
                             if symbol:
