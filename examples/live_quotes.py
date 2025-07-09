@@ -145,16 +145,23 @@ class QuoteMonitor:
         previous = self.previous_quotes.get(symbol)
         
         # Format the quote data
-        last_price = self.format_price(quote.quote.lastPrice) if quote.quote.lastPrice else "N/A"
-        bid = f"{self.format_price(quote.quote.bidPrice)} x {quote.quote.bidSize or 0}" if quote.quote.bidPrice is not None else "N/A"
-        ask = f"{self.format_price(quote.quote.askPrice)} x {quote.quote.askSize or 0}" if quote.quote.askPrice is not None else "N/A"
-        volume = f"{quote.quote.totalVolume:,}" if quote.quote.totalVolume else "N/A"
+        last_price = self.format_price(quote.quote.last_price) if quote.quote.last_price else "N/A"
+        bid = f"{self.format_price(quote.quote.bid_price)} x {quote.quote.bid_size or 0}" if quote.quote.bid_price is not None else "N/A"
+        ask = f"{self.format_price(quote.quote.ask_price)} x {quote.quote.ask_size or 0}" if quote.quote.ask_price is not None else "N/A"
+        volume = f"{quote.quote.total_volume:,}" if quote.quote.total_volume else "N/A"
         
         # Calculate change from previous quote
-        if previous and previous.quote and previous.quote.lastPrice and quote.quote.lastPrice:
-            change = self.format_change(quote.quote.lastPrice, previous.quote.lastPrice)
-        elif quote.quote.lastPrice and quote.quote.closePrice:
-            change = self.format_change(quote.quote.lastPrice, quote.quote.closePrice)
+        prev_quote = None
+        if previous:
+            if hasattr(previous, 'root'):
+                prev_quote = previous.root
+            else:
+                prev_quote = previous
+                
+        if prev_quote and prev_quote.quote and prev_quote.quote.last_price and quote.quote.last_price:
+            change = self.format_change(quote.quote.last_price, prev_quote.quote.last_price)
+        elif quote.quote.last_price and quote.quote.close_price:
+            change = self.format_change(quote.quote.last_price, quote.quote.close_price)
         else:
             change = "N/A"
             
@@ -186,7 +193,12 @@ class QuoteMonitor:
                 # Print quotes in symbol order
                 for symbol in self.symbols:
                     if symbol in quotes:
-                        self.print_quote(symbol, quotes[symbol])
+                        # Access the actual response object through the root attribute
+                        quote_obj = quotes[symbol]
+                        if hasattr(quote_obj, 'root'):
+                            self.print_quote(symbol, quote_obj.root)
+                        else:
+                            self.print_quote(symbol, quote_obj)
                         
                 # Update previous quotes
                 self.previous_quotes = quotes

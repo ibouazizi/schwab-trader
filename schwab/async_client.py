@@ -3,10 +3,11 @@ from datetime import datetime
 import aiohttp
 from urllib.parse import urljoin
 
-from .models.base import ErrorResponse, AccountNumbers
-from .models.generated.trading_models import AccountNumberHash as AccountNumber, Account
-from .models.generated.trading_models import Order
-from .models.quotes import QuoteResponse
+from .models.base import AccountNumbers  # Keep for now - custom aggregation model
+from .models.generated.market_data_models import ErrorResponse, QuoteResponse
+from .models.generated.trading_models import (
+    AccountNumberHash as AccountNumber, Account, Order
+)
 from .api.quotes import QuotesMixin
 
 class AsyncSchwabClient(QuotesMixin):

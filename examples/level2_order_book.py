@@ -81,60 +81,74 @@ class OrderBookMonitor:
         """Initialize authentication and clients."""
         print("Initializing Schwab API...")
         
-        # Check for stored credentials or prompt for new ones
-        auth_params = self.cred_manager.get_auth_params()
+        # Check for market data credentials first
+        auth_params = self.cred_manager.get_auth_params(api_type="market_data")
         
         if not auth_params:
-            print("\nNo stored credentials found. Please enter your Schwab API credentials.")
+            print("\nNo stored market data credentials found.")
+            print("Level 2 streaming requires Market Data API credentials.")
             print("You can obtain these from: https://developer.schwab.com\n")
             
-            client_id = input("Client ID: ").strip()
-            client_secret = input("Client Secret: ").strip()
-            redirect_uri = input("Redirect URI (default: https://localhost:8443/callback): ").strip()
+            client_id = input("Market Data API Client ID: ").strip()
+            client_secret = input("Market Data API Client Secret: ").strip()
             
-            if not redirect_uri:
-                redirect_uri = "https://localhost:8443/callback"
-            
-            # Save credentials
-            self.cred_manager.save_credentials(client_id, client_secret, redirect_uri)
+            # Save market data credentials
+            self.cred_manager.save_credentials(client_id, client_secret, api_type="market_data")
             auth_params = {
                 'client_id': client_id,
-                'client_secret': client_secret,
-                'redirect_uri': redirect_uri
+                'client_secret': client_secret
             }
         else:
-            print("\nUsing stored credentials...")
+            print("\nUsing stored market data credentials...")
             
-        # Initialize the client with OAuth credentials
+        # For market data streaming, we need a trading client for user preferences
+        # but will use market data credentials for streaming auth
+        trading_params = self.cred_manager.get_auth_params(api_type="trading")
+        if not trading_params:
+            print("\nTrading API credentials also needed for user preferences...")
+            trading_client_id = input("Trading API Client ID: ").strip()
+            trading_client_secret = input("Trading API Client Secret: ").strip()
+            redirect_uri = input("Redirect URI (default: https://localhost:8443/callback): ").strip()
+            if not redirect_uri:
+                redirect_uri = "https://localhost:8443/callback"
+            self.cred_manager.save_credentials(trading_client_id, trading_client_secret, redirect_uri, api_type="trading")
+            trading_params = {
+                'client_id': trading_client_id,
+                'client_secret': trading_client_secret,
+                'redirect_uri': redirect_uri
+            }
+        
+        # Initialize the trading client for user preferences
         self.client = SchwabClient(            
-            client_id=auth_params['client_id'],
-            client_secret=auth_params['client_secret'],
-            redirect_uri=auth_params.get('redirect_uri', 'https://localhost:8443/callback')
+            client_id=trading_params['client_id'],
+            client_secret=trading_params['client_secret'],
+            redirect_uri=trading_params.get('redirect_uri', 'https://localhost:8443/callback')
         )
         
-        # Check for valid tokens
-        tokens = self.cred_manager.get_tokens()
+        # Check for valid trading tokens (for user preferences)
+        tokens = self.cred_manager.get_tokens(api_type="trading")
         if tokens and tokens['is_valid']:
-            print("Using stored access token...")
+            print("Using stored trading access token...")
             self.client.auth.access_token = tokens['access_token']
             self.client.auth.refresh_token = tokens['refresh_token']
             self.client.auth.token_expiry = tokens['expiry']
-            print("Successfully authenticated using stored tokens!")
+            print("Successfully authenticated with trading API!")
         else:
             # Get new authorization
             auth_code = self.get_authorization_code(self.client.auth)
             
             # Exchange authorization code for tokens
-            print("\nExchanging authorization code for tokens...")
+            print("\nExchanging authorization code for trading tokens...")
             token_data = self.client.auth.exchange_code_for_tokens(auth_code)
-            print("Successfully authenticated!")
+            print("Successfully authenticated with trading API!")
             
-            # Save tokens
+            # Save trading tokens
             if hasattr(self.client.auth, 'access_token') and self.client.auth.access_token:
                 self.cred_manager.save_tokens(
                     self.client.auth.access_token,
                     self.client.auth.refresh_token if hasattr(self.client.auth, 'refresh_token') else None,
-                    expires_in=1800  # 30 minutes
+                    expires_in=1800,  # 30 minutes
+                    api_type="trading"
                 )
         
         # Get user preferences for streaming
@@ -143,8 +157,42 @@ class OrderBookMonitor:
         if not user_prefs.streamer_info:
             raise ValueError("No streamer info available in user preferences")
             
-        # Initialize streaming client
-        self.streamer = StreamerClient(self.client.auth, user_prefs.streamer_info[0])
+        # Create market data auth for streaming
+        from schwab.auth import SchwabAuth
+        market_data_auth = SchwabAuth(
+            client_id=auth_params['client_id'],
+            client_secret=auth_params['client_secret'],
+            redirect_uri="https://localhost:8443/callback"  # Market data doesn't need redirect
+        )
+        
+        # Check for market data tokens
+        md_tokens = self.cred_manager.get_tokens(api_type="market_data")
+        if md_tokens and md_tokens['is_valid']:
+            print("Using stored market data access token...")
+            market_data_auth.access_token = md_tokens['access_token']
+            market_data_auth.refresh_token = md_tokens['refresh_token']
+            market_data_auth.token_expiry = md_tokens['expiry']
+        else:
+            # Get market data token using client credentials grant
+            print("Getting market data access token...")
+            try:
+                # Market data API uses client credentials grant (no user authorization needed)
+                token_data = market_data_auth.get_client_credentials_token()
+                print("Successfully authenticated with market data API!")
+                
+                # Save market data tokens
+                self.cred_manager.save_tokens(
+                    market_data_auth.access_token,
+                    None,  # No refresh token for client credentials
+                    expires_in=1800,
+                    api_type="market_data"
+                )
+            except Exception as e:
+                print(f"Failed to get market data token: {e}")
+                raise
+        
+        # Initialize streaming client with market data auth
+        self.streamer = StreamerClient(market_data_auth, user_prefs.streamer_info[0])
         
         print("Setup complete!")
         
@@ -210,14 +258,30 @@ class OrderBookMonitor:
         
     async def on_level2_update(self, service: str, data: List[Dict[str, Any]]):
         """Handle Level 2 order book updates."""
-        order_books = StreamingOrderBook.from_data(data)
+        print(f"\n🔄 Level 2 callback triggered for service: {service}")
+        print(f"📊 Received {len(data)} data items")
         
-        # Update our stored order books
-        self.order_books.update(order_books)
+        # Debug: Print raw data structure
+        if data:
+            print(f"📋 Sample data structure: {data[0].keys() if data[0] else 'Empty'}")
+            for i, item in enumerate(data[:3]):  # Show first 3 items
+                print(f"  Item {i}: {item}")
         
-        # Display each updated book
-        for symbol, book in order_books.items():
-            self.display_order_book(symbol, book)
+        try:
+            order_books = StreamingOrderBook.from_data(data)
+            print(f"📖 Parsed {len(order_books)} order books")
+            
+            # Update our stored order books
+            self.order_books.update(order_books)
+            
+            # Display each updated book
+            for symbol, book in order_books.items():
+                print(f"📈 Displaying order book for {symbol}")
+                self.display_order_book(symbol, book)
+                
+        except Exception as e:
+            print(f"❌ Error processing Level 2 data: {e}")
+            print(f"📊 Raw data: {data}")
             
     async def start_streaming(self):
         """Start streaming Level 2 data."""
@@ -247,26 +311,46 @@ class OrderBookMonitor:
         print("Level 2 Order Book Monitor Active!")
         print("Press Ctrl+C to stop")
         print("="*60)
+        print("\n⏳ Waiting for Level 2 data...")
+        print("💡 Note: Level 2 data may take time to arrive or may not be available")
+        print("   for your account type. Many retail accounts don't have access to")
+        print("   real-time Level 2 market depth data.")
         
     async def refresh_token_if_needed(self):
-        """Check and refresh token if it's about to expire."""
-        tokens = self.cred_manager.get_tokens()
-        if tokens and tokens['expires_in'] < 300:  # Less than 5 minutes left
-            print("\nToken expiring soon, refreshing...")
+        """Check and refresh tokens if they're about to expire."""
+        # Check trading tokens
+        trading_tokens = self.cred_manager.get_tokens(api_type="trading")
+        if trading_tokens and trading_tokens['expires_in'] < 300:  # Less than 5 minutes left
+            print("\nTrading token expiring soon, refreshing...")
             try:
-                # Refresh the token
                 self.client.auth.refresh_access_token()
-                
-                # Save the new tokens
-                if hasattr(self.client.auth, 'access_token') and self.client.auth.access_token:
-                    self.cred_manager.save_tokens(
-                        self.client.auth.access_token,
-                        self.client.auth.refresh_token if hasattr(self.client.auth, 'refresh_token') else None,
-                        expires_in=1800  # 30 minutes
-                    )
-                    print("Token refreshed successfully!")
+                self.cred_manager.save_tokens(
+                    self.client.auth.access_token,
+                    self.client.auth.refresh_token,
+                    expires_in=1800,
+                    api_type="trading"
+                )
+                print("Trading token refreshed successfully!")
             except Exception as e:
-                print(f"Error refreshing token: {e}")
+                print(f"Error refreshing trading token: {e}")
+        
+        # Check market data tokens
+        md_tokens = self.cred_manager.get_tokens(api_type="market_data")
+        if md_tokens and md_tokens['expires_in'] < 300:  # Less than 5 minutes left
+            print("\nMarket data token expiring soon, refreshing...")
+            try:
+                # Market data uses client credentials, so get a new token
+                if hasattr(self.streamer, 'streamer') and hasattr(self.streamer.streamer, 'auth'):
+                    self.streamer.streamer.auth.get_client_credentials_token()
+                    self.cred_manager.save_tokens(
+                        self.streamer.streamer.auth.access_token,
+                        None,  # No refresh token for client credentials
+                        expires_in=1800,
+                        api_type="market_data"
+                    )
+                    print("Market data token refreshed successfully!")
+            except Exception as e:
+                print(f"Error refreshing market data token: {e}")
                 
     async def run(self):
         """Main run loop with token refresh."""
@@ -276,6 +360,7 @@ class OrderBookMonitor:
             
             # Keep running until interrupted
             token_check_counter = 0
+            status_check_counter = 0
             while self.running:
                 await asyncio.sleep(1)
                 
@@ -284,6 +369,25 @@ class OrderBookMonitor:
                 if token_check_counter >= 60:
                     await self.refresh_token_if_needed()
                     token_check_counter = 0
+                
+                # Print status every 30 seconds
+                status_check_counter += 1
+                if status_check_counter >= 30:
+                    is_connected = self.streamer and hasattr(self.streamer, 'streamer') and self.streamer.streamer and self.streamer.streamer.is_connected
+                    data_received = len(self.order_books) > 0
+                    
+                    # Check token status
+                    trading_tokens = self.cred_manager.get_tokens(api_type="trading")
+                    md_tokens = self.cred_manager.get_tokens(api_type="market_data")
+                    trading_valid = trading_tokens and trading_tokens['is_valid']
+                    md_valid = md_tokens and md_tokens['is_valid']
+                    
+                    print(f"\n📡 Status: Connected={is_connected}, Data Received={data_received}, Books={len(self.order_books)}")
+                    print(f"🔐 Auth: Trading Token={trading_valid}, Market Data Token={md_valid}")
+                    if not data_received:
+                        print("💭 Still waiting for Level 2 data. This is normal for retail accounts.")
+                        print("🎯 Using Market Data API credentials for streaming authentication.")
+                    status_check_counter = 0
                 
         except KeyboardInterrupt:
             print("\nShutting down...")
