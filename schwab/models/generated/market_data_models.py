@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, Field, RootModel, ValidationError
 
 
 class AssetType(Enum):
@@ -1565,7 +1565,6 @@ class Fundamental(BaseModel):
         alias='declarationDate',
         description='Declaration date in yyyy-mm-ddThh:mm:ssZ',
         examples=['2021-04-28T00:00:00Z'],
-        pattern="yyyy-MM-dd'T'HH:mm:ssZ",
     )
     div_amount: Optional[float] = Field(
         None, alias='divAmount', description='Dividend Amount', examples=[0.88]
@@ -1585,7 +1584,6 @@ class Fundamental(BaseModel):
         alias='divPayDate',
         description='Dividend pay date in yyyy-mm-ddThh:mm:ssZ',
         examples=['2021-05-13T00:00:00Z'],
-        pattern="yyyy-MM-dd'T'HH:mm:ssZ",
     )
     div_yield: Optional[float] = Field(
         None, alias='divYield', description='Dividend yield', examples=[0.7]
@@ -1605,14 +1603,12 @@ class Fundamental(BaseModel):
         alias='nextDivExDate',
         description='Next Dividend date',
         examples=['2021-02-12T00:00:00Z'],
-        pattern="yyyy-MM-dd'T'HH:mm:ssZ",
     )
     next_div_pay_date: Optional[datetime_aliased] = Field(
         None,
         alias='nextDivPayDate',
         description='Next Dividend pay date',
         examples=['2021-02-12T00:00:00Z'],
-        pattern="yyyy-MM-dd'T'HH:mm:ssZ",
     )
     pe_ratio: Optional[float] = Field(
         None, alias='peRatio', description='P/E Ratio', examples=[28.599]

@@ -75,21 +75,53 @@ class AccountOverview:
         """Get a summary of account balances and positions."""
         account = self.client.get_account(account_number, include_positions=True)
         
+        # Access the securities account
+        sec_acct = account.securities_account
+        
+        # Get positions list
+        positions_list = []
+        if hasattr(sec_acct, 'positions') and sec_acct.positions:
+            positions_list = sec_acct.positions
+        
         # Calculate total equity value
-        total_equity = sum(
-            position.market_value
-            for position in account.positions
-            if position.asset_type == "EQUITY"
-        )
+        total_equity = Decimal("0")
+        for position in positions_list:
+            if hasattr(position, 'instrument') and hasattr(position.instrument, 'asset_type'):
+                if position.instrument.asset_type == "EQUITY":
+                    if hasattr(position, 'market_value') and position.market_value:
+                        total_equity += Decimal(str(position.market_value))
+        
+        # Get account info from securities account
+        account_id = sec_acct.account_number if hasattr(sec_acct, 'account_number') else "Unknown"
+        account_type = sec_acct.type if hasattr(sec_acct, 'type') else "Unknown"
+        
+        # Get balance info
+        cash_balance = Decimal("0")
+        total_value = Decimal("0")
+        buying_power_value = Decimal("0")
+        
+        if hasattr(sec_acct, 'current_balances') and sec_acct.current_balances:
+            balances = sec_acct.current_balances
+            if hasattr(balances, 'available_funds'):
+                cash_balance = Decimal(str(balances.available_funds))
+            if hasattr(balances, 'liquidation_value'):
+                total_value = Decimal(str(balances.liquidation_value))
+            
+            # For margin accounts
+            if hasattr(balances, 'buying_power') and balances.buying_power:
+                buying_power_value = Decimal(str(balances.buying_power))
+            # For cash accounts, use cash_available_for_trading
+            elif hasattr(balances, 'cash_available_for_trading') and balances.cash_available_for_trading:
+                buying_power_value = Decimal(str(balances.cash_available_for_trading))
         
         return {
-            "account_id": account.account_id,
-            "account_type": account.account_type,
-            "cash_balance": account.cash_balance,
+            "account_id": account_id,
+            "account_type": account_type,
+            "cash_balance": cash_balance,
             "total_equity": total_equity,
-            "total_value": account.total_value,
-            "buying_power": account.buying_power,
-            "positions": account.positions
+            "total_value": total_value,
+            "buying_power": buying_power_value,
+            "positions": positions_list
         }
 
     def get_open_orders(self, account_number: str) -> List[Order]:
@@ -119,19 +151,37 @@ class AccountOverview:
         print("\n=== Equity Positions ===")
         positions_data = []
         for pos in summary['positions']:
-            if pos.asset_type == "EQUITY":
-                gain_loss = pos.market_value - pos.cost_basis
-                gain_loss_pct = (gain_loss / pos.cost_basis * 100) if pos.cost_basis != 0 else Decimal('0')
-                
-                positions_data.append([
-                    pos.symbol,
-                    pos.quantity,
-                    self.format_currency(pos.average_price),
-                    self.format_currency(pos.current_price),
-                    self.format_currency(pos.market_value),
-                    self.format_currency(gain_loss),
-                    self.format_percentage(gain_loss_pct)
-                ])
+            if hasattr(pos, 'instrument') and hasattr(pos.instrument, 'asset_type'):
+                if pos.instrument.asset_type == "EQUITY":
+                    # Get symbol
+                    symbol = pos.instrument.symbol if hasattr(pos.instrument, 'symbol') else "Unknown"
+                    
+                    # Get position values
+                    quantity = Decimal(str(pos.long_quantity)) if hasattr(pos, 'long_quantity') and pos.long_quantity else Decimal('0')
+                    market_value = Decimal(str(pos.market_value)) if hasattr(pos, 'market_value') and pos.market_value else Decimal('0')
+                    
+                    # Get average cost
+                    average_price = Decimal('0')
+                    if hasattr(pos, 'average_price') and pos.average_price:
+                        average_price = Decimal(str(pos.average_price))
+                    
+                    # Calculate current price from market value
+                    current_price = market_value / quantity if quantity > 0 else Decimal('0')
+                    
+                    # Calculate gain/loss
+                    cost_basis = average_price * quantity
+                    gain_loss = market_value - cost_basis
+                    gain_loss_pct = (gain_loss / cost_basis * 100) if cost_basis != 0 else Decimal('0')
+                    
+                    positions_data.append([
+                        symbol,
+                        quantity,
+                        self.format_currency(average_price),
+                        self.format_currency(current_price),
+                        self.format_currency(market_value),
+                        self.format_currency(gain_loss),
+                        self.format_percentage(gain_loss_pct)
+                    ])
 
         if positions_data:
             print(tabulate(
@@ -146,15 +196,33 @@ class AccountOverview:
         print("\n=== Open Orders ===")
         orders_data = []
         for order in open_orders:
+            # Get order details
+            order_id = order.order_id if hasattr(order, 'order_id') else "Unknown"
+            order_type = order.order_type if hasattr(order, 'order_type') else "Unknown"
+            status = order.status if hasattr(order, 'status') else "Unknown"
+            quantity = order.quantity if hasattr(order, 'quantity') else 0
+            price = order.price if hasattr(order, 'price') and order.price else None
+            entered_time = order.entered_time if hasattr(order, 'entered_time') else None
+            
+            # Get symbol and instruction from order legs
+            symbol = "Unknown"
+            instruction = "Unknown"
+            if hasattr(order, 'order_leg_collection') and order.order_leg_collection:
+                first_leg = order.order_leg_collection[0]
+                if hasattr(first_leg, 'instrument') and hasattr(first_leg.instrument, 'symbol'):
+                    symbol = first_leg.instrument.symbol
+                if hasattr(first_leg, 'instruction'):
+                    instruction = first_leg.instruction
+            
             orders_data.append([
-                order.order_id,
-                order.order_type,
-                order.symbol,
-                order.instruction,
-                order.quantity,
-                self.format_currency(order.price) if order.price else "MARKET",
-                order.status,
-                order.entered_time.strftime("%Y-%m-%d %H:%M:%S")
+                order_id,
+                order_type,
+                symbol,
+                instruction,
+                quantity,
+                self.format_currency(Decimal(str(price))) if price else "MARKET",
+                status,
+                entered_time.strftime("%Y-%m-%d %H:%M:%S") if entered_time else "Unknown"
             ])
 
         if orders_data:
@@ -219,12 +287,41 @@ def main():
         
         # Check for valid tokens
         tokens = cred_manager.get_tokens()
-        if tokens and tokens['is_valid']:
-            print("Using stored access token...")
+        if tokens and tokens.get('refresh_token'):
+            # We have tokens, set them even if expired
             client.auth.access_token = tokens['access_token']
             client.auth.refresh_token = tokens['refresh_token']
-            print("Successfully authenticated using stored tokens!")
-        else:
+            if tokens.get('expiry'):
+                client.auth.token_expiry = tokens['expiry']
+                
+            # Try to refresh if expired
+            if not tokens['is_valid'] and tokens.get('refresh_token'):
+                print("Access token expired, refreshing...")
+                try:
+                    # Refresh the token
+                    token_data = client.auth.refresh_access_token()
+                    print("Successfully refreshed access token!")
+                    
+                    # Save new tokens
+                    cred_manager.save_tokens(
+                        client.auth.access_token,
+                        client.auth.refresh_token,
+                        expires_in=1800  # 30 minutes
+                    )
+                except Exception as e:
+                    print(f"Failed to refresh token: {e}")
+                    # Fall through to get new authorization
+                    tokens = None
+            else:
+                print("Using stored access token...")
+                
+            # Update session headers with the authorization token
+            if tokens:
+                client.session.headers.update(client.auth.authorization_header)
+                print("Successfully authenticated using stored tokens!")
+        
+        # If no valid tokens, get new authorization
+        if not tokens or not client.auth.access_token:
             # Get new authorization
             auth_code = get_authorization_code(client.auth)
             
@@ -246,13 +343,13 @@ def main():
         
         # Get all account numbers
         print("\nFetching account numbers...")
-        accounts = client.get_account_numbers()
+        account_numbers = client.get_account_numbers()
         
         # Print overview for each account
-        for account in accounts:
-            print(f"\nAccount Overview for: {account.account_id}")
+        for account in account_numbers.accounts:
+            print(f"\nAccount Overview for: {account.account_number}")
             print("=" * 50)
-            overview.print_account_overview(account.encrypted_account_number)
+            overview.print_account_overview(account.hash_value)
 
     except Exception as e:
         print(f"Error: {str(e)}")

@@ -1,8 +1,8 @@
 from typing import Callable, Dict, List, Optional
 from datetime import datetime
 import asyncio
-from .models.orders import Order, OrderStatus
-from .models.execution import ExecutionReport, ExecutionReportList
+from .models.generated.trading_models import Order, Status as OrderStatus
+from .models.execution import ExecutionReport, ExecutionReportList  # Keep - custom models
 
 class OrderMonitor:
     def __init__(self, client):

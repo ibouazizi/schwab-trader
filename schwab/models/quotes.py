@@ -1,142 +1,41 @@
-from typing import Dict, Optional, List, Union
-from enum import Enum
-from datetime import datetime
-from pydantic import RootModel
-from .base import BaseModel
+"""
+Legacy quote models for backward compatibility.
 
-class AssetMainType(str, Enum):
-    EQUITY = "EQUITY"
-    MUTUAL_FUND = "MUTUAL_FUND"
-    INDEX = "INDEX"
-    OPTION = "OPTION"
+This file is deprecated. Please use models from schwab.models.generated.market_data_models instead.
+"""
 
-class QuoteType(str, Enum):
-    NBBO = "NBBO"
+# Re-export from generated models for backward compatibility
+from .generated.market_data_models import (
+    QuoteResponse,
+    EquityResponse as QuoteData,
+    QuoteEquity as Quote,
+    AssetMainType,
+)
 
-class SecurityStatus(str, Enum):
-    NORMAL = "Normal"
-    UNKNOWN = "Unknown"
+# Create compatibility aliases for old model structure
+class Reference:
+    """Deprecated - use Quote fields directly"""
+    pass
 
-class Reference(BaseModel):
-    cusip: Optional[str] = None
-    description: Optional[str] = None
-    exchange: Optional[str] = None
-    exchangeName: Optional[str] = None
-    otcMarketTier: Optional[str] = None
-    # Option specific fields
-    contractType: Optional[str] = None
-    daysToExpiration: Optional[int] = None
-    expirationDay: Optional[int] = None
-    expirationMonth: Optional[int] = None
-    expirationYear: Optional[int] = None
-    isPennyPilot: Optional[bool] = None
-    lastTradingDay: Optional[int] = None
-    multiplier: Optional[int] = None
-    settlementType: Optional[str] = None
-    strikePrice: Optional[float] = None
-    underlying: Optional[str] = None
-    uvExpirationType: Optional[str] = None
+class Regular:
+    """Deprecated - use Quote fields directly"""
+    pass
 
-class Quote(BaseModel):
-    weekHigh52: Optional[float] = None
-    weekLow52: Optional[float] = None
-    askMICId: Optional[str] = None
-    askPrice: Optional[float] = None
-    askSize: Optional[int] = None
-    askTime: Optional[int] = None
-    bidMICId: Optional[str] = None
-    bidPrice: Optional[float] = None
-    bidSize: Optional[int] = None
-    bidTime: Optional[int] = None
-    closePrice: Optional[float] = None
-    highPrice: Optional[float] = None
-    lastMICId: Optional[str] = None
-    lastPrice: Optional[float] = None
-    lastSize: Optional[int] = None
-    lowPrice: Optional[float] = None
-    mark: Optional[float] = None
-    markChange: Optional[float] = None
-    markPercentChange: Optional[float] = None
-    netChange: Optional[float] = None
-    netPercentChange: Optional[float] = None
-    openPrice: Optional[float] = None
-    quoteTime: Optional[int] = None
-    securityStatus: Optional[SecurityStatus] = None
-    totalVolume: Optional[int] = None
-    tradeTime: Optional[int] = None
-    volatility: Optional[float] = None
-    # Mutual Fund specific
-    nAV: Optional[float] = None
-    # Option specific
-    delta: Optional[float] = None
-    gamma: Optional[float] = None
-    impliedYield: Optional[float] = None
-    indAskPrice: Optional[float] = None
-    indBidPrice: Optional[float] = None
-    indQuoteTime: Optional[int] = None
-    moneyIntrinsicValue: Optional[float] = None
-    openInterest: Optional[int] = None
-    rho: Optional[float] = None
-    theoreticalOptionValue: Optional[float] = None
-    theta: Optional[float] = None
-    timeValue: Optional[float] = None
-    underlyingPrice: Optional[float] = None
-    vega: Optional[float] = None
+class Fundamental:
+    """Deprecated - use Quote fields directly"""
+    pass
 
-class Regular(BaseModel):
-    regularMarketLastPrice: Optional[float] = None
-    regularMarketLastSize: Optional[int] = None
-    regularMarketNetChange: Optional[float] = None
-    regularMarketPercentChange: Optional[float] = None
-    regularMarketTradeTime: Optional[int] = None
+class QuoteType:
+    """Deprecated - use AssetMainType instead"""
+    pass
 
-class Fundamental(BaseModel):
-    avg10DaysVolume: Optional[float] = None
-    avg1YearVolume: Optional[float] = None
-    declarationDate: Optional[datetime] = None
-    divAmount: Optional[float] = None
-    divExDate: Optional[datetime] = None
-    divFreq: Optional[int] = None
-    divPayAmount: Optional[float] = None
-    divPayDate: Optional[datetime] = None
-    divYield: Optional[float] = None
-    eps: Optional[float] = None
-    fundLeverageFactor: Optional[float] = None
-    fundStrategy: Optional[str] = None
-    nextDivExDate: Optional[datetime] = None
-    nextDivPayDate: Optional[datetime] = None
-    peRatio: Optional[float] = None
+# Create SecurityStatus for compatibility
+class SecurityStatus:
+    """Deprecated - security status is included in Quote fields"""
+    pass
 
-class QuoteData(BaseModel):
-    assetMainType: Optional[AssetMainType] = None
-    assetSubType: Optional[str] = None
-    symbol: str
-    quoteType: Optional[str] = None
-    realtime: Optional[bool] = None
-    ssid: Optional[int] = None
-    reference: Optional[Reference] = None
-    quote: Optional[Quote] = None
-    regular: Optional[Regular] = None
-    fundamental: Optional[Fundamental] = None
-
-class QuoteResponse(RootModel):
-    """Response model for quote endpoint containing a dictionary of symbols to their quote data"""
-    root: Dict[str, QuoteData]
-
-    def __iter__(self):
-        return iter(self.root.items())
-
-    def __getitem__(self, key):
-        return self.root[key]
-    
-    def __contains__(self, key):
-        return key in self.root
-    
-    def keys(self):
-        return self.root.keys()
-    
-    def values(self):
-        return self.root.values()
-    
-    def items(self):
-        return self.root.items()
+# Deprecated - will be removed in future versions
+__all__ = [
+    "QuoteResponse", "QuoteData", "Quote", "Reference", "Regular", 
+    "Fundamental", "AssetMainType", "QuoteType", "SecurityStatus"
+]

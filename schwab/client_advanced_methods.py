@@ -4,11 +4,11 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Dict, Any, Optional, Union
 
-from .models.orders import (
-    Order, OrderType, OrderSession, OrderDuration, OrderStrategyType,
-    OrderLeg, OrderLegType, OrderInstruction, PositionEffect, QuantityType,
-    ComplexOrderStrategyType, SpecialInstruction, RequestedDestination,
-    TaxLotMethod
+from .models.generated.trading_models import (
+    Order, OrderType, Session as OrderSession, Duration as OrderDuration, 
+    OrderStrategyType, OrderLeg, OrderLegType, Instruction as OrderInstruction, 
+    PositionEffect, QuantityType, ComplexOrderStrategyType, SpecialInstruction, 
+    RequestedDestination, TaxLotMethod, TransactionType
 )
 
 def create_multi_leg_option_order(
@@ -253,7 +253,7 @@ def get_portfolio_analysis(self, account_numbers: Optional[List[str]] = None) ->
                     analysis["total_value"] += Decimal(str(sec_account.current_balances.liquidation_value or 0))
             
             # Process positions
-            if hasattr(sec_account, 'positions'):
+            if hasattr(sec_account, 'positions') and sec_account.positions:
                 for position in sec_account.positions:
                     # Get Greeks for options
                     if position.instrument.asset_type == "OPTION":
@@ -384,7 +384,7 @@ def get_cost_basis_summary(self, account_number: str) -> Dict[str, Any]:
     cost_basis_summary = {}
     
     if hasattr(account, 'securities_account') and account.securities_account:
-        if hasattr(account.securities_account, 'positions'):
+        if hasattr(account.securities_account, 'positions') and account.securities_account.positions:
             for position in account.securities_account.positions:
                 symbol = position.instrument.symbol
                 cost_basis_summary[symbol] = {

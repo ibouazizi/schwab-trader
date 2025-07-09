@@ -7,7 +7,7 @@ connections to Schwab's Streamer API.
 
 import asyncio
 import json
-import logging
+
 import time
 from datetime import datetime
 from typing import Dict, List, Optional, Callable, Any, Union
@@ -17,10 +17,7 @@ import websockets
 from websockets.client import WebSocketClientProtocol
 
 from .auth import SchwabAuth
-from .models.user_preference import StreamerInfo
-
-logger = logging.getLogger(__name__)
-
+from .models.generated.trading_models import StreamerInfo
 
 class StreamerService(str, Enum):
     """Available streamer services."""
@@ -49,7 +46,6 @@ class StreamerService(str, Enum):
     ACCT_ACTIVITY = "ACCT_ACTIVITY"
     CHART_HISTORY_FUTURES = "CHART_HISTORY_FUTURES"
 
-
 class StreamerCommand(str, Enum):
     """Streamer commands."""
     ADMIN = "ADMIN"
@@ -61,7 +57,6 @@ class StreamerCommand(str, Enum):
     ADD = "ADD"
     VIEW = "VIEW"
 
-
 class QOSLevel(int, Enum):
     """Quality of Service levels."""
     EXPRESS = 0  # 500ms
@@ -70,7 +65,6 @@ class QOSLevel(int, Enum):
     MODERATE = 3  # 1500ms
     SLOW = 4  # 3000ms
     DELAYED = 5  # 5000ms
-
 
 class LevelOneEquityFields(int, Enum):
     """Level 1 equity data fields."""
@@ -127,7 +121,6 @@ class LevelOneEquityFields(int, Enum):
     TRADE_TIME_IN_LONG = 50
     REGULAR_MARKET_TRADE_TIME_IN_LONG = 51
 
-
 class LevelOneOptionFields(int, Enum):
     """Level 1 option data fields."""
     SYMBOL = 0
@@ -173,7 +166,6 @@ class LevelOneOptionFields(int, Enum):
     UV_EXPIRATION_TYPE = 40
     MARK = 41
 
-
 class LevelTwoFields(int, Enum):
     """Level 2 (order book) data fields."""
     SYMBOL = 0
@@ -189,7 +181,6 @@ class LevelTwoFields(int, Enum):
     ASK_TIME = 10
     QUOTE_TIME = 11
 
-
 class NewsFields(int, Enum):
     """News data fields."""
     SYMBOL = 0
@@ -204,7 +195,6 @@ class NewsFields(int, Enum):
     IS_HOT = 9
     STORY_SOURCE = 10
 
-
 class ChartEquityFields(int, Enum):
     """Chart equity data fields."""
     SYMBOL = 0
@@ -217,14 +207,12 @@ class ChartEquityFields(int, Enum):
     CHART_TIME = 7
     CHART_DAY = 8
 
-
 class AcctActivityFields(int, Enum):
     """Account activity data fields."""
     ACCOUNT = 0
     MESSAGE_TYPE = 1
     MESSAGE_DATA = 2
     SUBSCRIPTION_KEY = 3
-
 
 class SchwabStreamer:
     """WebSocket streaming client for Schwab market data."""
@@ -250,12 +238,12 @@ class SchwabStreamer:
     async def connect(self):
         """Establish WebSocket connection and authenticate."""
         if self.is_connected:
-            logger.warning("Already connected to streamer")
+
             return
             
         try:
             # Connect to WebSocket
-            logger.info(f"Connecting to {self.streamer_info.streamer_socket_url}")
+
             self.websocket = await websockets.connect(self.streamer_info.streamer_socket_url)
             
             # Send login request
@@ -268,10 +256,9 @@ class SchwabStreamer:
             self._receive_task = asyncio.create_task(self._receive_loop())
             
             self.is_connected = True
-            logger.info("Successfully connected to Schwab streamer")
-            
+
         except Exception as e:
-            logger.error(f"Failed to connect to streamer: {e}")
+
             raise
     
     async def disconnect(self):
@@ -297,9 +284,7 @@ class SchwabStreamer:
         if self.websocket:
             await self.websocket.close()
             self.websocket = None
-            
-        logger.info("Disconnected from Schwab streamer")
-    
+
     async def _login(self):
         """Send login request."""
         # Try TD Ameritrade style format (Schwab acquired TDA)
@@ -746,7 +731,7 @@ class SchwabStreamer:
             raise RuntimeError("Not connected to streamer")
             
         message = json.dumps(request)
-        logger.debug(f"Sending: {message}")
+
         await self.websocket.send(message)
     
     async def _receive_loop(self):
@@ -765,23 +750,20 @@ class SchwabStreamer:
                     await self._handle_notify(data["notify"])
                     
             except websockets.exceptions.ConnectionClosed:
-                logger.warning("WebSocket connection closed")
                 self.is_connected = False
                 break
             except json.JSONDecodeError as e:
-                logger.error(f"Failed to decode message: {e}")
+                pass
             except Exception as e:
-                logger.error(f"Error in receive loop: {e}")
-    
+                pass
+
     async def _handle_response(self, responses: List[Dict]):
         """Handle response messages."""
         for response in responses:
             service = response.get("service")
             command = response.get("command")
             content = response.get("content", {})
-            
-            logger.info(f"Response: {service} {command} - {content.get('msg', 'OK')}")
-    
+
     async def _handle_data(self, data_list: List[Dict]):
         """Handle streaming data messages."""
         for data in data_list:
@@ -794,13 +776,13 @@ class SchwabStreamer:
                     try:
                         callback(service, content)
                     except Exception as e:
-                        logger.error(f"Error in callback: {e}")
-    
+                        pass
+
     async def _handle_notify(self, notifications: List[Dict]):
         """Handle notification messages."""
         for notification in notifications:
-            logger.debug(f"Notification: {notification}")
-    
+            pass
+
     async def _heartbeat_loop(self):
         """Send periodic heartbeats."""
         while self.is_connected:
@@ -824,8 +806,8 @@ class SchwabStreamer:
                 await self._send_request(heartbeat)
                 
             except Exception as e:
-                logger.error(f"Error in heartbeat loop: {e}")
-    
+                pass
+
     def _get_request_id(self) -> int:
         """Get next request ID."""
         self.request_id += 1
@@ -846,7 +828,6 @@ class SchwabStreamer:
                 }
             }]
         }
-
 
 class StreamerClient:
     """High-level streaming client with automatic reconnection."""
@@ -904,7 +885,7 @@ class StreamerClient:
             self._reconnect_attempts = 0
             
         except Exception as e:
-            logger.error(f"Failed to connect: {e}")
+
             raise
     
     async def _reconnect_loop(self):
@@ -915,7 +896,7 @@ class StreamerClient:
                 
                 if not self.streamer or not self.streamer.is_connected:
                     if self._reconnect_attempts >= self._max_reconnect_attempts:
-                        logger.error(f"Max reconnection attempts ({self._max_reconnect_attempts}) reached. Stopping reconnection.")
+
                         self._running = False
                         break
                         
@@ -924,9 +905,7 @@ class StreamerClient:
                     # Calculate delay with exponential backoff
                     delay = min(self._reconnect_delay * (2 ** (self._reconnect_attempts - 1)), 
                               self._max_reconnect_delay)
-                    
-                    logger.info(f"Connection lost, attempting to reconnect (attempt {self._reconnect_attempts}/{self._max_reconnect_attempts}) in {delay} seconds...")
-                    
+
                     await asyncio.sleep(delay)
                     
                     try:
@@ -934,15 +913,13 @@ class StreamerClient:
                         
                         # Re-establish subscriptions
                         await self._restore_subscriptions()
-                        
-                        logger.info("Successfully reconnected to streamer")
-                        
+
                     except Exception as conn_error:
-                        logger.error(f"Reconnection attempt {self._reconnect_attempts} failed: {conn_error}")
-                    
+                        pass
+
             except Exception as e:
-                logger.error(f"Error in reconnect loop: {e}")
-    
+                pass
+
     async def _restore_subscriptions(self):
         """Restore subscriptions after reconnection."""
         if not self.streamer:
@@ -995,12 +972,10 @@ class StreamerClient:
                         sub_info["symbols"],
                         sub_info["fields"]
                     )
-                    
-                logger.info(f"Restored subscription for service: {service}")
-                
+
             except Exception as e:
-                logger.error(f"Failed to restore subscription for {service}: {e}")
-    
+                pass
+
     # Proxy methods to streamer
     async def subscribe_quote(self, symbols: List[str], fields: Optional[List[int]] = None,
                             callback: Optional[Callable] = None):
@@ -1069,7 +1044,6 @@ class StreamerClient:
         if self.streamer:
             self.streamer.remove_callback(service, callback)
 
-
 @dataclass
 class StreamingQuote:
     """Parsed streaming quote data."""
@@ -1107,7 +1081,6 @@ class StreamingQuote:
             close_price=data.get(str(LevelOneEquityFields.CLOSE_PRICE.value)),
             net_change=data.get(str(LevelOneEquityFields.NET_CHANGE.value))
         )
-
 
 @dataclass
 class StreamingOptionQuote:
@@ -1157,7 +1130,6 @@ class StreamingOptionQuote:
             intrinsic_value=data.get(str(LevelOneOptionFields.MONEY_INTRINSIC_VALUE.value))
         )
 
-
 @dataclass
 class OrderBookEntry:
     """Single order book entry."""
@@ -1165,7 +1137,6 @@ class OrderBookEntry:
     size: int
     market_maker: Optional[str] = None
     time: Optional[int] = None
-    
 
 @dataclass
 class StreamingOrderBook:
@@ -1217,7 +1188,6 @@ class StreamingOrderBook:
             
         return books
 
-
 @dataclass
 class StreamingNews:
     """Streaming news data."""
@@ -1241,7 +1211,6 @@ class StreamingNews:
             is_hot=bool(data.get(str(NewsFields.IS_HOT.value), False)),
             story_source=data.get(str(NewsFields.STORY_SOURCE.value))
         )
-
 
 @dataclass
 class StreamingChartBar:
@@ -1268,7 +1237,6 @@ class StreamingChartBar:
             sequence=data.get(str(ChartEquityFields.SEQUENCE.value), 0),
             chart_time=data.get(str(ChartEquityFields.CHART_TIME.value), 0)
         )
-
 
 @dataclass
 class StreamingAccountActivity:

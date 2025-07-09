@@ -114,6 +114,32 @@ class SchwabAuth:
         self._update_tokens(token_data)
         return token_data
     
+    def get_client_credentials_token(self) -> Dict:
+        """Get access token using client credentials grant (for market data API).
+        
+        Returns:
+            Dict containing token and expiry information
+        """
+        headers = {
+            "Authorization": self.get_basic_auth_header(),
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        
+        data = {
+            "grant_type": "client_credentials"
+        }
+        
+        response = requests.post(
+            f"{self.auth_base_url}/token",
+            headers=headers,
+            data=data
+        )
+        response.raise_for_status()
+        
+        token_data = response.json()
+        self._update_tokens(token_data)
+        return token_data
+    
     def _update_tokens(self, token_data: Dict) -> None:
         """Update stored tokens and expiry time.
         
@@ -123,6 +149,11 @@ class SchwabAuth:
         self.access_token = token_data["access_token"]
         self.refresh_token = token_data.get("refresh_token")  # May not be present in refresh response
         expires_in = token_data["expires_in"]
+        
+        # Ensure expires_in is an integer
+        if isinstance(expires_in, str):
+            expires_in = int(expires_in)
+        
         self.token_expiry = datetime.now() + timedelta(seconds=expires_in)
     
     def ensure_valid_token(self) -> None:

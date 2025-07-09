@@ -84,12 +84,16 @@ except ImportError as e:
     Instruction = RequestedDestination = ComplexOrderStrategyType = None
     AssetType = None
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+
+# Configure logging for Charts tab only
+chart_logger = logging.getLogger('portfolio_gui.charts')
+chart_logger.setLevel(logging.DEBUG)
+# Create console handler with formatting
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+formatter = logging.Formatter('%(asctime)s - [CHART] %(levelname)s - %(message)s')
+ch.setFormatter(formatter)
+chart_logger.addHandler(ch)
 
 # Constants
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'schwab_trader.db')
@@ -394,6 +398,9 @@ class PriceChartWidget(ctk.CTkFrame):
         self.canvas = FigureCanvasTkAgg(self.figure, self)
         self.canvas.get_tk_widget().pack(fill="both", expand=True)
         
+        # Keep a reference to prevent garbage collection
+        self._canvas_widget = self.canvas.get_tk_widget()
+        
         # Store both simple and OHLCV data
         self.price_data = {"time": [], "price": [], "volume": []}
         self.ohlcv_data = {"time": [], "open": [], "high": [], "low": [], "close": [], "volume": []}
@@ -438,10 +445,12 @@ class PriceChartWidget(ctk.CTkFrame):
     
     def set_historical_data(self, symbol, times, prices, volumes=None, opens=None, highs=None, lows=None):
         """Set historical data for the chart."""
+        
         self.symbol = symbol
         self.price_data["time"] = times.copy()
         self.price_data["price"] = prices.copy()
         self.price_data["volume"] = volumes.copy() if volumes else [0] * len(times)
+        
         
         # Set OHLCV data if available
         if opens and highs and lows:
@@ -454,9 +463,17 @@ class PriceChartWidget(ctk.CTkFrame):
         else:
             # Generate dummy OHLCV from line data
             self.generate_ohlcv_from_line()
-            
+        
         self.redraw()
         
+        # Schedule another redraw after a short delay to ensure visibility
+        self.after(100, self._ensure_chart_visible)
+        
+    def _ensure_chart_visible(self):
+        """Ensure the chart remains visible after rendering."""
+        if self.price_data["time"] or self.ohlcv_data["time"]:
+            self.canvas.draw_idle()
+    
     def generate_ohlcv_from_line(self):
         """Generate OHLCV data from line price data for candlestick/bar charts."""
         if not self.price_data["time"]:
@@ -492,6 +509,7 @@ class PriceChartWidget(ctk.CTkFrame):
         
     def redraw(self):
         """Redraw the chart based on chart type."""
+        
         self.ax_price.clear()
         self.ax_volume.clear()
         
@@ -505,6 +523,7 @@ class PriceChartWidget(ctk.CTkFrame):
             self.figure.tight_layout()
             self.canvas.draw()
             return
+        
         
         # Draw based on chart type
         if self.chart_type == "Line":
@@ -537,10 +556,25 @@ class PriceChartWidget(ctk.CTkFrame):
         self.figure.tight_layout()
         self.canvas.draw()
         
+        # Force update the canvas
+        try:
+            self.canvas.flush_events()
+        except:
+            pass  # flush_events might not be available in all backends
+            
+        self.canvas.draw_idle()  # Use draw_idle for better performance
+        self.update_idletasks()
+        
+        # Ensure canvas is visible
+        if hasattr(self, '_canvas_widget'):
+            self._canvas_widget.update()
+        
+        
     def _draw_line_chart(self):
         """Draw line chart."""
         if not self.price_data["time"]:
             return
+        
             
         self.ax_price.plot(self.price_data["time"], self.price_data["price"], 
                     color='#00ff88', linewidth=2, label='Price')
@@ -1557,6 +1591,8 @@ class EnhancedSchwabPortfolioGUI(ctk.CTk):
                 ("separator", None, None),
                 ("Export...", self.export_data, "Ctrl+E"),
                 ("separator", None, None),
+                ("Clear Authentication", self.clear_credentials, None),
+                ("separator", None, None),
                 ("Settings", self.open_settings, "Ctrl+S"),
                 ("separator", None, None),
                 ("Exit", self.on_closing, None)
@@ -2043,7 +2079,10 @@ class EnhancedSchwabPortfolioGUI(ctk.CTk):
             # Redraw charts with new theme
             if hasattr(self, 'main_chart'):
                 self.main_chart.figure.patch.set_facecolor('#1a1a1a' if mode == "dark" else 'white')
-                self.main_chart.ax.set_facecolor('#1a1a1a' if mode == "dark" else 'white')
+                if hasattr(self.main_chart, 'ax_price'):
+                    self.main_chart.ax_price.set_facecolor('#1a1a1a' if mode == "dark" else 'white')
+                if hasattr(self.main_chart, 'ax_volume'):
+                    self.main_chart.ax_volume.set_facecolor('#1a1a1a' if mode == "dark" else 'white')
                 self.main_chart.redraw()
                 
             if hasattr(self, 'allocation_figure'):
@@ -2163,7 +2202,7 @@ A professional-grade trading interface for Charles Schwab.
             conn.close()
             
         except Exception as e:
-            logger.error(f"Database error: {e}")
+            pass
             
     # Background tasks
     def process_update_queue(self):
@@ -2204,7 +2243,7 @@ A professional-grade trading interface for Charles Schwab.
                         self.after(0, self.status_bar.update_market_status, "Weekend")
                         
                 except Exception as e:
-                    logger.error(f"Market status check error: {e}")
+                    pass
                     
                 time.sleep(60)  # Check every minute
                 
@@ -2259,7 +2298,7 @@ A professional-grade trading interface for Charles Schwab.
             self.show_info("Disconnected from Schwab")
             
         except Exception as e:
-            logger.error(f"Error disconnecting: {e}")
+            pass
         
     def load_credentials(self):
         """Load saved credentials from database."""
@@ -2289,7 +2328,6 @@ A professional-grade trading interface for Charles Schwab.
             
             conn.close()
         except Exception as e:
-            logger.error(f"Error loading credentials: {e}")
             # Show auth dialog on error
             self.show_auth_dialog()
     
@@ -2427,7 +2465,6 @@ A professional-grade trading interface for Charles Schwab.
                 self.connect_with_credentials(trading_id, trading_secret, redirect_uri, market_id, market_secret)
                 
             except Exception as e:
-                logger.error(f"Failed to save credentials: {e}")
                 messagebox.showerror("Error", f"Failed to save credentials: {str(e)}")
         
         # Connect button
@@ -2459,7 +2496,6 @@ A professional-grade trading interface for Charles Schwab.
             c = conn.cursor()
             c.execute("SELECT * FROM tokens WHERE api_type='trading' LIMIT 1")
             token_data = c.fetchone()
-            conn.close()
             
             if token_data:
                 # Try to use existing tokens
@@ -2469,19 +2505,15 @@ A professional-grade trading interface for Charles Schwab.
                     try:
                         self.auth.token_expiry = datetime.fromisoformat(token_data[4])
                     except ValueError:
-                        logger.warning("Invalid token expiry format, will need to re-authenticate")
                         self.auth.token_expiry = datetime.now() - timedelta(days=1)  # Force expired
                 
                 # Check if token is expired
                 if self.auth.token_expiry and self.auth.token_expiry <= datetime.now():
                     # Try to refresh
                     try:
-                        logger.info("Access token expired, attempting to refresh...")
                         self.auth.refresh_access_token()
                         self.save_tokens()
-                        logger.info("Token refreshed successfully")
                     except Exception as e:
-                        logger.error(f"Token refresh failed: {e}")
                         # Clear invalid tokens
                         self.clear_tokens()
                         # Refresh failed, need new auth
@@ -2490,17 +2522,51 @@ A professional-grade trading interface for Charles Schwab.
                             "Session expired. Please re-authenticate.",
                             "warning"
                         )
+                        conn.close()
                         self.start_oauth_flow()
                         return
-                else:
-                    logger.info("Using existing valid token from database")
             else:
                 # No tokens, start OAuth flow
+                conn.close()
                 self.start_oauth_flow()
                 return
             
-            # Initialize client
-            self.client = SchwabClient(trading_id, trading_secret, redirect_uri, auth=self.auth)
+            # Check for saved market data token and get a new one if needed
+            if market_id and market_secret:
+                # Check for existing market data token using the same connection
+                c.execute("SELECT * FROM tokens WHERE api_type='market_data' LIMIT 1")
+                market_token_data = c.fetchone()
+                
+                if not market_token_data or not market_token_data[2]:
+                    # No market data token, get one using client credentials
+                    try:
+                        print(f"Getting market data token using client credentials...")
+                        market_data_auth = SchwabAuth(market_id, market_secret, redirect_uri)
+                        market_data_auth.get_client_credentials_token()
+                        print(f"Got market data token: {market_data_auth.access_token[:30]}...")
+                        # Save the market data token
+                        self.save_tokens(market_data_auth)
+                        print("Market data token saved successfully")
+                    except Exception as e:
+                        print(f"ERROR getting market data token: {str(e)}")
+                        ToastNotification.show_toast(
+                            self, 
+                            f"Warning: Could not get market data token: {str(e)}", 
+                            "warning"
+                        )
+                else:
+                    print(f"Using existing market data token from database")
+            
+            # Close the database connection
+            conn.close()
+            
+            # Initialize client with both trading and market data credentials
+            self.client = SchwabClient(
+                trading_id, trading_secret, redirect_uri, 
+                auth=self.auth,
+                market_data_client_id=market_id,
+                market_data_client_secret=market_secret
+            )
             
             # Get accounts
             account_numbers = self.client.get_account_numbers()
@@ -2520,11 +2586,9 @@ A professional-grade trading interface for Charles Schwab.
             
             # Add accounts to portfolio manager
             for account in self.accounts:
-                logger.info(f"Adding account {account[-4:]} to portfolio manager")
                 self.portfolio_manager.add_account(account)
             
             # Refresh portfolio data immediately
-            logger.info("Refreshing portfolio positions after adding accounts...")
             self.portfolio_manager.refresh_positions()
             
             # Initialize order monitor
@@ -2543,7 +2607,6 @@ A professional-grade trading interface for Charles Schwab.
             ToastNotification.show_toast(self, "Connected to Schwab successfully!", "success", duration=3000)
             
         except Exception as e:
-            logger.error(f"Failed to connect: {e}")
             messagebox.showerror("Connection Error", f"Failed to connect: {str(e)}")
             self.status_bar.update_connection_status(False, "Failed")
     
@@ -2621,7 +2684,6 @@ A professional-grade trading interface for Charles Schwab.
                 copy_button.configure(text="✓ Copied!")
                 oauth_dialog.after(2000, lambda: copy_button.configure(text="Copy URL to Clipboard"))
             except Exception as e:
-                logger.error(f"Failed to copy to clipboard: {e}")
                 messagebox.showerror("Error", "Failed to copy URL to clipboard")
         
         def complete_auth():
@@ -2655,7 +2717,6 @@ A professional-grade trading interface for Charles Schwab.
                 self.finalize_connection()
                 
             except Exception as e:
-                logger.error(f"OAuth error: {e}")
                 messagebox.showerror("Authentication Error", f"Failed to authenticate: {str(e)}")
         
         # Open browser button
@@ -2698,7 +2759,7 @@ A professional-grade trading interface for Charles Schwab.
         )
         cancel_button.pack(side="left")
     
-    def save_tokens(self):
+    def save_tokens(self, market_data_auth=None):
         """Save tokens to database."""
         try:
             conn = sqlite3.connect(DB_PATH)
@@ -2707,7 +2768,7 @@ A professional-grade trading interface for Charles Schwab.
             # Clear existing tokens
             c.execute("DELETE FROM tokens WHERE api_type='trading'")
             
-            # Insert new tokens
+            # Insert trading tokens
             c.execute("""
                 INSERT INTO tokens (api_type, access_token, refresh_token, expiry)
                 VALUES (?, ?, ?, ?)
@@ -2718,11 +2779,22 @@ A professional-grade trading interface for Charles Schwab.
                 self.auth.token_expiry.isoformat() if self.auth.token_expiry else ""
             ))
             
+            # Save market data token if provided
+            if market_data_auth and market_data_auth.access_token:
+                c.execute("DELETE FROM tokens WHERE api_type='market_data'")
+                c.execute("""
+                    INSERT INTO tokens (api_type, access_token, refresh_token, expiry)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    "market_data",
+                    market_data_auth.access_token,
+                    market_data_auth.refresh_token or "",
+                    market_data_auth.token_expiry.isoformat() if market_data_auth.token_expiry else ""
+                ))
+            
             conn.commit()
             conn.close()
-            logger.info("Tokens saved successfully")
         except Exception as e:
-            logger.error(f"Failed to save tokens: {e}")
             raise
     
     def clear_tokens(self):
@@ -2733,9 +2805,42 @@ A professional-grade trading interface for Charles Schwab.
             c.execute("DELETE FROM tokens")
             conn.commit()
             conn.close()
-            logger.info("Tokens cleared successfully")
         except Exception as e:
-            logger.error(f"Failed to clear tokens: {e}")
+            pass
+    
+    def clear_credentials(self):
+        """Clear all saved credentials and tokens, then show auth dialog."""
+        try:
+            # First disconnect if connected
+            if self.client:
+                self.disconnect_from_schwab()
+            
+            # Clear all authentication data from database
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            
+            # Clear credentials
+            c.execute("DELETE FROM credentials")
+            
+            # Clear tokens
+            c.execute("DELETE FROM tokens")
+            
+            conn.commit()
+            conn.close()
+            
+            # Show success message
+            ToastNotification.show_toast(
+                self,
+                "Authentication data cleared successfully",
+                "success"
+            )
+            
+            # Show authentication dialog
+            self.show_auth_dialog()
+            
+        except Exception as e:
+            self.show_error(f"Failed to clear credentials: {str(e)}")
+    
     
     def finalize_connection(self):
         """Finalize the connection after successful authentication."""
@@ -2748,12 +2853,37 @@ A professional-grade trading interface for Charles Schwab.
             conn.close()
             
             if creds:
-                # Initialize client with authenticated auth
-                # Use trading credentials from correct columns
+                # Get credentials from correct columns
                 trading_id = creds[6] or creds[2]
                 trading_secret = creds[7] or creds[3]
                 redirect_uri = creds[4] or 'https://localhost:8443/callback'
-                self.client = SchwabClient(trading_id, trading_secret, redirect_uri, auth=self.auth)
+                market_data_id = creds[8]
+                market_data_secret = creds[9]
+                
+                # Get market data token if credentials are provided
+                market_data_auth = None
+                if market_data_id and market_data_secret:
+                    try:
+                        # Create auth handler for market data
+                        market_data_auth = SchwabAuth(market_data_id, market_data_secret, redirect_uri)
+                        # Get token using client credentials grant
+                        market_data_auth.get_client_credentials_token()
+                        # Save the market data token
+                        self.save_tokens(market_data_auth)
+                    except Exception as e:
+                        ToastNotification.show_toast(
+                            self, 
+                            f"Warning: Could not get market data token: {str(e)}", 
+                            "warning"
+                        )
+                
+                # Initialize client with both auth handlers
+                self.client = SchwabClient(
+                    trading_id, trading_secret, redirect_uri, 
+                    auth=self.auth,
+                    market_data_client_id=market_data_id,
+                    market_data_client_secret=market_data_secret
+                )
                 
                 # Get accounts
                 account_numbers = self.client.get_account_numbers()
@@ -2768,11 +2898,9 @@ A professional-grade trading interface for Charles Schwab.
                 # Initialize portfolio manager
                 self.portfolio_manager = PortfolioManager(self.client)
                 for account in self.accounts:
-                    logger.info(f"Adding account {account[-4:]} to portfolio manager")
                     self.portfolio_manager.add_account(account)
                 
                 # Refresh portfolio data immediately
-                logger.info("Refreshing portfolio positions after adding accounts...")
                 self.portfolio_manager.refresh_positions()
                 
                 # Initialize order monitor
@@ -2791,7 +2919,6 @@ A professional-grade trading interface for Charles Schwab.
                 ToastNotification.show_toast(self, "Connected to Schwab successfully!", "success", duration=3000)
                 
         except Exception as e:
-            logger.error(f"Failed to finalize connection: {e}")
             messagebox.showerror("Connection Error", f"Failed to connect: {str(e)}")
             self.status_bar.update_connection_status(False, "Failed")
     
@@ -2806,9 +2933,7 @@ A professional-grade trading interface for Charles Schwab.
                 total_positions = 0
                 for account_num in self.portfolio_manager._positions:
                     positions_dict = self.portfolio_manager._positions.get(account_num, {})
-                    logger.info(f"Account {account_num[-4:]}: {len(positions_dict)} positions")
                     total_positions += len(positions_dict)
-                logger.info(f"Total positions across all accounts: {total_positions}")
                 
                 # Update UI
                 self.update_portfolio_display()
@@ -2819,7 +2944,6 @@ A professional-grade trading interface for Charles Schwab.
                 self.status_bar.update_last_update()
                 
             except Exception as e:
-                logger.error(f"Error refreshing data: {e}")
                 if "401" in str(e) or "unauthorized" in str(e).lower():
                     self.handle_auth_error()
                 else:
@@ -2896,17 +3020,24 @@ A professional-grade trading interface for Charles Schwab.
                             quotes_response = self.client.get_quotes(list(self.watched_symbols))
                             
                             # Process each quote
-                            if hasattr(quotes_response, 'items'):
-                                for symbol, quote_data in quotes_response.items():
-                                    self.update_queue.put({
-                                        "type": "quote",
-                                        "data": {"symbol": symbol, "quote": quote_data}
-                                    })
+                            if hasattr(quotes_response, 'root') and quotes_response.root:
+                                for symbol, quote_data in quotes_response.root.items():
+                                    # The quote_data is a QuoteResponseObject with a root attribute
+                                    if hasattr(quote_data, 'root'):
+                                        actual_quote = quote_data.root
+                                        self.update_queue.put({
+                                            "type": "quote",
+                                            "data": {"symbol": symbol, "quote": actual_quote}
+                                        })
                         except Exception as e:
-                            logger.error(f"Error getting quotes: {e}")
+                            print(f"ERROR fetching quotes: {str(e)}")
+                            # Ignore datetime validation errors from the API
+                            if "datetime" in str(e) and "pattern" in str(e):
+                                pass
+                            else:
+                                pass
                             
             except Exception as e:
-                logger.error(f"Update worker error: {e}")
                 if "401" in str(e) or "unauthorized" in str(e).lower():
                     # Authentication error - stop updates
                     self.after(0, self.handle_auth_error)
@@ -3217,12 +3348,10 @@ A professional-grade trading interface for Charles Schwab.
             self.refresh_orders()
             
         except (ImportError, AttributeError) as e:
-            logger.warning(f"Enhanced order dialog error: {e}")
             
             # Try the fixed version
             try:
                 from enhanced_order_dialog_fixed import EnhancedOrderDialog
-                logger.info("Using fixed enhanced order dialog")
                 
                 dialog = EnhancedOrderDialog(
                     self, 
@@ -3237,7 +3366,6 @@ A professional-grade trading interface for Charles Schwab.
                 self.refresh_orders()
                 
             except Exception as e2:
-                logger.warning(f"Fixed dialog also failed: {e2}, falling back to simple dialog")
                 # Fall back to simple order dialog if enhanced not available
                 self._show_simple_order_dialog(symbol, quantity, instruction)
     
@@ -3459,7 +3587,6 @@ A professional-grade trading interface for Charles Schwab.
                 self.refresh_orders()
                 
             except Exception as e:
-                logger.error(f"Error placing order: {e}")
                 messagebox.showerror("Order Error", f"Failed to place order: {str(e)}")
         
         submit_btn = ctk.CTkButton(
@@ -3500,13 +3627,33 @@ A professional-grade trading interface for Charles Schwab.
         if not self.client:
             ToastNotification.show_toast(self, "Not connected to Schwab", "error")
             return
+        
+        # Prevent re-entry while loading
+        if hasattr(self, '_loading_chart') and self._loading_chart:
+            chart_logger.debug(f"Already loading chart for {symbol}, skipping...")
+            return
             
+        self._loading_chart = True
+        
+        # Add call stack trace to debug multiple calls
+        import traceback
+        chart_logger.info(f"Starting to load chart data for symbol: {symbol}")
+        chart_logger.debug(f"Called from: {''.join(traceback.format_stack()[-3:-1])}")
+        
         try:
             # Clear current chart
+            chart_logger.debug("Clearing chart before loading new data")
             self.main_chart.clear_chart()
             
             # Get current quote
-            quotes_response = self.client.get_quotes([symbol])
+            chart_logger.info(f"Getting quotes for {symbol}")
+            try:
+                quotes_response = self.client.get_quotes([symbol])
+            except Exception as quote_error:
+                chart_logger.error(f"Error getting quotes: {quote_error}")
+                raise
+                
+            chart_logger.info(f"Quotes response type: {type(quotes_response)}")
             if hasattr(quotes_response, 'items'):
                 for sym, quote_data in quotes_response.items():
                     if sym == symbol:
@@ -3520,9 +3667,13 @@ A professional-grade trading interface for Charles Schwab.
                             price = q.get('last', 0) or q.get('lastPrice', 0)
                             
                         if price > 0:
-                            # Clear and set symbol
-                            self.main_chart.clear_chart()
+                            # Set symbol (don't clear chart here, _generate_historical_data will handle it)
                             self.main_chart.symbol = symbol
+                            chart_logger.info(f"Set chart symbol to {symbol}, current price: {price}")
+                            
+                            # Ensure chart is visible
+                            chart_logger.info("Ensuring chart visibility")
+                            self.main_chart.update_idletasks()
                             
                             # Fetch historical data based on current timeframe
                             self._generate_historical_data(self.timeframe_var.get())
@@ -3532,23 +3683,33 @@ A professional-grade trading interface for Charles Schwab.
                                 self.watched_symbols.add(symbol)
                                 self.watchlist.add_symbol(symbol, price, 0, 0)
                         else:
+                            chart_logger.warning(f"No price data found for {symbol}")
                             ToastNotification.show_toast(self, f"No price data for {symbol}", "warning")
                             
         except Exception as e:
-            logger.error(f"Error loading chart data: {e}")
+            chart_logger.error(f"Error loading chart data: {e}")
+            chart_logger.error(f"Error type: {type(e).__name__}")
+            if hasattr(e, '__dict__'):
+                chart_logger.error(f"Error details: {e.__dict__}")
+            
+            # Add full stack trace
+            import traceback
+            chart_logger.error(f"Full stack trace:\n{traceback.format_exc()}")
+            
             ToastNotification.show_toast(self, f"Error loading data: {str(e)}", "error")
+        finally:
+            # Reset loading flag
+            self._loading_chart = False
     
     def change_timeframe(self, timeframe):
         """Change chart timeframe."""
         self.timeframe_var.set(timeframe)
         self.main_chart.set_timeframe(timeframe)
         
-        # Generate sample historical data based on timeframe
-        self._generate_historical_data(timeframe)
-        
-        # Reload chart if we have a symbol
+        # Only generate historical data if we have a symbol
+        # Don't call load_chart_data() as _generate_historical_data already loads the data
         if self.chart_symbol_var.get():
-            self.load_chart_data()
+            self._generate_historical_data(timeframe)
             
         ToastNotification.show_toast(self, f"Timeframe changed to {timeframe}", "info")
         
@@ -3562,9 +3723,21 @@ A professional-grade trading interface for Charles Schwab.
         symbol = self.chart_symbol_var.get().strip().upper()
         if not symbol or not self.client:
             return
+        
+        # Prevent re-entry
+        if hasattr(self, '_generating_historical') and self._generating_historical:
+            chart_logger.debug(f"Already generating historical data for {symbol}, skipping...")
+            return
+            
+        self._generating_historical = True
+        chart_logger.info(f"_generate_historical_data called for {symbol}, timeframe: {timeframe}")
             
         try:
             # Map timeframe to API parameters
+            # Based on API constraints:
+            # - periodType=day: valid periods are [1, 2, 3, 4, 5, 10], frequencyType must be "minute"
+            # - periodType=month: valid periods are [1, 2, 3, 6], frequencyType can be "daily" or "weekly"
+            # - periodType=year: valid periods are [1, 2, 3, 5, 10, 15, 20], frequencyType can be "daily", "weekly", or "monthly"
             timeframe_config = {
                 "1D": {"period_type": "day", "period": 1, "frequency_type": "minute", "frequency": 5},
                 "5D": {"period_type": "day", "period": 5, "frequency_type": "minute", "frequency": 30},
@@ -3576,30 +3749,67 @@ A professional-grade trading interface for Charles Schwab.
             }
             
             if timeframe not in timeframe_config:
-                logger.error(f"Invalid timeframe: {timeframe}")
+                chart_logger.error(f"Invalid timeframe: {timeframe}")
                 return
                 
             config = timeframe_config[timeframe]
+            chart_logger.debug(f"Using config for {timeframe}: {config}")
             
-            # Fetch historical data from API
-            history_response = self.client.get_price_history(
-                symbol=symbol,
-                period_type=config["period_type"],
-                period=config["period"],
-                frequency_type=config["frequency_type"],
-                frequency=config["frequency"],
-                need_extended_hours_data=False,
-                need_previous_close=True
-            )
+            # Fetch historical data from API using period parameters only
+            try:
+                history_response = self.client.get_price_history(
+                    symbol=symbol,
+                    period_type=config["period_type"],
+                    period=config["period"],
+                    frequency_type=config["frequency_type"],
+                    frequency=config["frequency"],
+                    need_extended_hours_data=False,
+                    need_previous_close=True
+                )
+            except Exception as api_error:
+                chart_logger.error(f"Price history API call failed: {api_error}")
+                # If the API fails with period parameters, try with explicit dates
+                chart_logger.info("Retrying with explicit date range...")
+                
+                end_date = datetime.now()
+                if timeframe == "1D":
+                    start_date = end_date - timedelta(days=1)
+                elif timeframe == "5D":
+                    start_date = end_date - timedelta(days=5)
+                elif timeframe == "1M":
+                    start_date = end_date - timedelta(days=30)
+                elif timeframe == "3M":
+                    start_date = end_date - timedelta(days=90)
+                elif timeframe == "6M":
+                    start_date = end_date - timedelta(days=180)
+                elif timeframe == "1Y":
+                    start_date = end_date - timedelta(days=365)
+                elif timeframe == "5Y":
+                    start_date = end_date - timedelta(days=365*5)
+                else:
+                    start_date = end_date - timedelta(days=30)
+                
+                # Try with explicit dates - still need periodType
+                chart_logger.debug(f"Retrying with date range: {start_date} to {end_date}")
+                history_response = self.client.get_price_history(
+                    symbol=symbol,
+                    period_type=config["period_type"],
+                    frequency_type=config["frequency_type"],
+                    frequency=config["frequency"],
+                    start_date=start_date,
+                    end_date=end_date,
+                    need_extended_hours_data=False,
+                    need_previous_close=True
+                )
             
             # Parse the response
             if not history_response or "candles" not in history_response:
-                logger.warning(f"No historical data returned for {symbol}")
+                chart_logger.warning(f"No historical data returned for {symbol}")
                 return
                 
             candles = history_response.get("candles", [])
             if not candles:
-                logger.warning(f"Empty candles list for {symbol}")
+                chart_logger.warning(f"Empty candles list for {symbol}")
                 return
                 
             # Extract OHLCV data
@@ -3623,13 +3833,16 @@ A professional-grade trading interface for Charles Schwab.
                 volumes.append(candle.get("volume", 0))
                 
             # Set the historical data
+            chart_logger.info(f"Setting historical data for {symbol} with {len(times)} data points")
             self.main_chart.set_historical_data(
                 symbol, times, closes, volumes, opens, highs, lows
             )
+            chart_logger.info(f"Historical data set successfully")
             
             # Store previous close if available
             if "previousClose" in history_response:
                 self.previous_close_prices[symbol] = history_response["previousClose"]
+                chart_logger.debug(f"Previous close for {symbol}: {history_response['previousClose']}")
                 
             ToastNotification.show_toast(
                 self, 
@@ -3638,12 +3851,21 @@ A professional-grade trading interface for Charles Schwab.
             )
             
         except Exception as e:
-            logger.error(f"Error fetching historical data: {e}")
+            chart_logger.error(f"Error fetching historical data: {e}")
+            chart_logger.error(f"Error type in _generate_historical_data: {type(e).__name__}")
+            
+            # Add full stack trace
+            import traceback
+            chart_logger.error(f"Stack trace from _generate_historical_data:\n{traceback.format_exc()}")
+            
             ToastNotification.show_toast(
                 self, 
                 f"Error loading historical data: {str(e)}", 
                 "error"
             )
+        finally:
+            # Reset generating flag
+            self._generating_historical = False
         
     def change_date_range(self, range_name):
         """Change history date range."""
@@ -3736,7 +3958,7 @@ A professional-grade trading interface for Charles Schwab.
             self.update_allocation_chart(allocations)
             
         except Exception as e:
-            logger.error(f"Error updating portfolio display: {e}")
+            pass
     
     def update_allocation_chart(self, allocations):
         """Update the allocation pie chart."""
@@ -3778,52 +4000,42 @@ A professional-grade trading interface for Charles Schwab.
     def update_positions_display(self, data=None):
         """Update positions display."""
         if not self.portfolio_manager:
-            logger.warning("No portfolio manager available for positions display")
             return
             
         try:
-            logger.info("Updating positions display...")
             
             # Clear existing items
             for item in self.positions_tree.get_children():
                 self.positions_tree.delete(item)
             
             # Get all positions
-            if data:
-                positions = data
-                logger.info(f"Using provided data: {len(positions)} positions")
+            if data is not None:
+                positions = data if isinstance(data, list) else []
             else:
                 positions = []
                 for account_num in self.portfolio_manager._positions:
                     positions_dict = self.portfolio_manager._positions.get(account_num, {})
-                    logger.info(f"Account {account_num[-4:]}: Found {len(positions_dict)} positions")
                     for symbol, position in positions_dict.items():
                         positions.append(position)
-                logger.info(f"Total positions to display: {len(positions)}")
             
             displayed_count = 0
             for position in positions:
                 # Extract symbol
                 symbol = self._extract_symbol_from_position(position)
                 if not symbol:
-                    logger.warning(f"Could not extract symbol from position: {position}")
                     continue
                 
                 # Debug: Log position attributes
                 position_attrs = [attr for attr in dir(position) if not attr.startswith('_')]
-                logger.info(f"Position attributes for {symbol}: {position_attrs}")
                 
                 # Get position details
                 long_qty = getattr(position, 'long_quantity', 0)
                 short_qty = getattr(position, 'short_quantity', 0)
-                logger.info(f"Position {symbol}: long_quantity={long_qty}, short_quantity={short_qty}")
                 
                 quantity = long_qty - short_qty
                 if quantity == 0:
-                    logger.info(f"Skipping {symbol} - zero quantity")
                     continue
                     
-                logger.info(f"Processing position: {symbol}, quantity: {quantity}")
                     
                 # Calculate values
                 market_value = getattr(position, 'market_value', 0)
@@ -3864,13 +4076,10 @@ A professional-grade trading interface for Charles Schwab.
                 # Insert item
                 self.positions_tree.insert("", "end", values=values, tags=tags)
                 displayed_count += 1
-                logger.info(f"Successfully displayed position: {symbol}")
             
-            logger.info(f"Positions display complete: {displayed_count} positions shown")
             
             # Debug: Add a test row if no positions were displayed
             if displayed_count == 0 and len(positions) > 0:
-                logger.warning("No positions displayed despite having data. Adding test row...")
                 test_values = ("TEST", "100", "$10.00", "$12.00", "$1,200.00", "$200.00", "20.00%", "$50.00")
                 self.positions_tree.insert("", "end", values=test_values, tags=("gain",))
             
@@ -3879,9 +4088,7 @@ A professional-grade trading interface for Charles Schwab.
             self.positions_tree.tag_configure("loss", foreground="#ff4444")
             
         except Exception as e:
-            logger.error(f"Error updating positions display: {e}")
             import traceback
-            logger.error(traceback.format_exc())
     
     def _extract_symbol_from_position(self, position) -> str:
         """Extract symbol from position object."""
@@ -3895,7 +4102,6 @@ A professional-grade trading interface for Charles Schwab.
                     return f"CUSIP:{instrument.cusip}"
             return ""
         except Exception as e:
-            logger.error(f"Error extracting symbol from position: {e}")
             return ""
             
     def refresh_orders(self):
@@ -3913,15 +4119,23 @@ A professional-grade trading interface for Charles Schwab.
                 
             # Get orders for all accounts
             all_orders = []
+            # Get orders from the last 7 days
+            from_date = datetime.now() - timedelta(days=7)
+            to_date = datetime.now()
+            
             for account_hash in self.accounts:
                 try:
-                    orders = self.client.get_orders(account_hash)
+                    orders = self.client.get_orders(
+                        account_number=account_hash,
+                        from_entered_time=from_date,
+                        to_entered_time=to_date
+                    )
                     for order in orders:
                         # Add account info to order
                         order.account_hash = account_hash
                         all_orders.append(order)
                 except Exception as e:
-                    logger.error(f"Error getting orders for account {account_hash}: {e}")
+                    pass
             
             # Filter orders
             filtered_orders = []
@@ -3991,7 +4205,7 @@ A professional-grade trading interface for Charles Schwab.
             self.orders_tree.tag_configure("open", foreground="#00aaff")
             
         except Exception as e:
-            logger.error(f"Error refreshing orders: {e}")
+            pass
             
     def update_orders_display(self, data):
         """Update orders display from queue data."""
@@ -4017,9 +4231,9 @@ A professional-grade trading interface for Charles Schwab.
             # Check for quote subobject
             if hasattr(quote, 'quote'):
                 q = quote.quote
-                price = getattr(q, 'last', 0) or getattr(q, 'lastPrice', 0) or getattr(q, 'regularMarketLastPrice', 0)
-                change = getattr(q, 'netChange', 0) or getattr(q, 'regularMarketNetChange', 0)
-                change_pct = getattr(q, 'percentChange', 0) or getattr(q, 'regularMarketPercentChange', 0)
+                price = getattr(q, 'last_price', 0) or getattr(q, 'lastPrice', 0) or getattr(q, 'last', 0) or 0
+                change = getattr(q, 'net_change', 0) or getattr(q, 'netChange', 0) or 0
+                change_pct = getattr(q, 'net_percent_change', 0) or getattr(q, 'percentChange', 0) or 0
             elif isinstance(quote, dict):
                 # Handle dict response
                 if 'quote' in quote:
@@ -4058,7 +4272,7 @@ A professional-grade trading interface for Charles Schwab.
                     self.main_chart.update_chart(symbol, current_time, price)
                     
         except Exception as e:
-            logger.error(f"Error updating quote display for {symbol}: {e}")
+            pass
 
 
 def main():

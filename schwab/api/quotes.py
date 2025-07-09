@@ -1,24 +1,62 @@
 from typing import List, Optional, Union, Dict, Any
 from datetime import datetime
+import re
 from ..models.quotes import QuoteResponse
 
 class QuotesMixin:
     """Mixin class providing quote-related API methods"""
     
-    def _build_quote_url(self, symbols: Union[str, List[str]], fields: Optional[List[str]] = None, 
-                        indicative: Optional[bool] = None) -> str:
-        """Build the URL for the quotes endpoint with query parameters"""
+    def _clean_datetime_values(self, data: Any) -> Any:
+        """Recursively clean datetime values in response data.
+        
+        Converts datetime objects and strings to the format expected by the models.
+        """
+        from datetime import datetime as dt
+        
+        if isinstance(data, dt):
+            # Handle datetime objects at any level first
+            # Convert to ISO format with Z suffix for UTC
+            if data.tzinfo:
+                # Remove timezone info and add Z
+                iso_str = data.isoformat()
+                # Handle different timezone formats
+                if iso_str.endswith('+00:00'):
+                    return iso_str[:-6] + 'Z'
+                elif 'T' in iso_str and '+' in iso_str:
+                    # Remove timezone offset
+                    return iso_str.split('+')[0] + 'Z'
+                elif 'T' in iso_str and '-' in iso_str.split('T')[1]:
+                    # Handle negative timezone offset
+                    return iso_str.split('T')[0] + 'T' + iso_str.split('T')[1].split('-')[0] + 'Z'
+                else:
+                    return iso_str.replace('+00:00', 'Z')
+            else:
+                return data.isoformat() + 'Z'
+        elif isinstance(data, dict):
+            cleaned = {}
+            for key, value in data.items():
+                # Always clean the value recursively
+                cleaned[key] = self._clean_datetime_values(value)
+            return cleaned
+        elif isinstance(data, list):
+            return [self._clean_datetime_values(item) for item in data]
+        else:
+            return data
+    
+    def _build_quote_params(self, symbols: Union[str, List[str]], fields: Optional[List[str]] = None, 
+                           indicative: Optional[bool] = None) -> Dict[str, Any]:
+        """Build the parameters for the quotes endpoint"""
         if isinstance(symbols, list):
             symbols = ','.join(symbols)
             
-        url = f"/marketdata/v1/quotes?symbols={symbols}"
+        params = {"symbols": symbols}
         
         if fields:
-            url += f"&fields={','.join(fields)}"
+            params["fields"] = ','.join(fields)
         if indicative is not None:
-            url += f"&indicative={str(indicative).lower()}"
+            params["indicative"] = indicative
             
-        return url
+        return params
 
     def get_quotes(self, symbols: Union[str, List[str]], 
                   fields: Optional[List[str]] = None,
@@ -35,21 +73,39 @@ class QuotesMixin:
         Returns:
             QuoteResponse object containing quote data for requested symbols
         """
-        url = self._build_quote_url(symbols, fields, indicative)
+        params = self._build_quote_params(symbols, fields, indicative)
         
-        # Check if we're in async context
-        if hasattr(self, '_async_get'):
-            import asyncio
-            if asyncio.iscoroutinefunction(self._async_get):
-                # We're in async context
-                response = asyncio.get_event_loop().run_until_complete(self._async_get(url))
+        # We're in sync context (get_quotes is not async)
+        response = self._get("/marketdata/v1/quotes", params=params)
+        
+        # Clean datetime values before parsing  
+        cleaned_response = self._clean_datetime_values(response)
+        
+        # Use model_validate with a custom config to handle datetime fields
+        try:
+            return QuoteResponse.model_validate(cleaned_response)
+        except Exception as e:
+            # If validation fails due to datetime issues, try converting the response manually
+            if "datetime" in str(e) and "pattern" in str(e):
+                # For each quote in the response, ensure fundamental date fields are strings
+                if isinstance(cleaned_response, dict):
+                    for symbol, quote_data in cleaned_response.items():
+                        if isinstance(quote_data, dict) and 'fundamental' in quote_data:
+                            fundamental = quote_data['fundamental']
+                            if isinstance(fundamental, dict):
+                                # Convert any datetime fields to ISO format strings
+                                date_fields = ['declarationDate', 'divPayDate', 'nextDivExDate', 'nextDivPayDate']
+                                for field in date_fields:
+                                    if field in fundamental:
+                                        value = fundamental[field]
+                                        if hasattr(value, 'isoformat'):
+                                            fundamental[field] = value.isoformat() + 'Z'
+                                        elif isinstance(value, str) and not value.endswith('Z'):
+                                            fundamental[field] = value + 'Z'
+                
+                return QuoteResponse.model_validate(cleaned_response)
             else:
-                response = self._async_get(url)
-        else:
-            # We're in sync context
-            response = self._get(url)
-            
-        return QuoteResponse.parse_obj(response)
+                raise
 
     async def async_get_quotes(self, symbols: Union[str, List[str]], 
                              fields: Optional[List[str]] = None,
@@ -66,9 +122,36 @@ class QuotesMixin:
         Returns:
             QuoteResponse object containing quote data for requested symbols
         """
-        url = self._build_quote_url(symbols, fields, indicative)
-        response = await self._async_get(url)
-        return QuoteResponse.parse_obj(response)
+        params = self._build_quote_params(symbols, fields, indicative)
+        response = await self._async_get("/marketdata/v1/quotes", params=params)
+        # Clean datetime values before parsing
+        cleaned_response = self._clean_datetime_values(response)
+        
+        # Use model_validate with a custom config to handle datetime fields
+        try:
+            return QuoteResponse.model_validate(cleaned_response)
+        except Exception as e:
+            # If validation fails due to datetime issues, try converting the response manually
+            if "datetime" in str(e) and "pattern" in str(e):
+                # For each quote in the response, ensure fundamental date fields are strings
+                if isinstance(cleaned_response, dict):
+                    for symbol, quote_data in cleaned_response.items():
+                        if isinstance(quote_data, dict) and 'fundamental' in quote_data:
+                            fundamental = quote_data['fundamental']
+                            if isinstance(fundamental, dict):
+                                # Convert any datetime fields to ISO format strings
+                                date_fields = ['declarationDate', 'divPayDate', 'nextDivExDate', 'nextDivPayDate']
+                                for field in date_fields:
+                                    if field in fundamental:
+                                        value = fundamental[field]
+                                        if hasattr(value, 'isoformat'):
+                                            fundamental[field] = value.isoformat() + 'Z'
+                                        elif isinstance(value, str) and not value.endswith('Z'):
+                                            fundamental[field] = value + 'Z'
+                
+                return QuoteResponse.model_validate(cleaned_response)
+            else:
+                raise
     
     # Price History Methods
     def get_price_history(
@@ -100,6 +183,7 @@ class QuotesMixin:
             Dictionary containing candles data with OHLCV information
         """
         params = {
+            "symbol": symbol,
             "periodType": period_type,
             "period": period,
             "frequencyType": frequency_type,
@@ -113,11 +197,19 @@ class QuotesMixin:
         if end_date:
             params["endDate"] = int(end_date.timestamp() * 1000)
             
-        url = f"/marketdata/v1/pricehistory?symbol={symbol}"
-        for key, value in params.items():
-            url += f"&{key}={value}"
-            
-        return self._make_request("GET", url) if hasattr(self, '_make_request') else self._get(url)
+        try:
+            if hasattr(self, '_make_request'):
+                response = self._make_request("GET", "/marketdata/v1/pricehistory", params=params)
+            else:
+                response = self._get("/marketdata/v1/pricehistory", params=params)
+            return response
+        except Exception as e:
+            # Check if this is a datetime validation error
+            if "datetime" in str(e) and "pattern" in str(e):
+                # Re-raise with additional context
+                import traceback
+                raise Exception(f"Datetime format issue from API: {str(e)}") from e
+            raise
     
     # Market Hours Methods
     def get_market_hours(self, markets: Union[str, List[str]], date: Optional[datetime] = None) -> Dict[str, Any]:
@@ -133,11 +225,14 @@ class QuotesMixin:
         if isinstance(markets, list):
             markets = ','.join(markets)
             
-        url = f"/marketdata/v1/markets?markets={markets}"
+        params = {"markets": markets}
         if date:
-            url += f"&date={date.strftime('%Y-%m-%d')}"
+            params["date"] = date.strftime('%Y-%m-%d')
             
-        return self._make_request("GET", url) if hasattr(self, '_make_request') else self._get(url)
+        if hasattr(self, '_make_request'):
+            return self._make_request("GET", "/marketdata/v1/markets", params=params)
+        else:
+            return self._get("/marketdata/v1/markets", params=params)
     
     def get_single_market_hours(self, market_id: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         """Get market hours for a specific market.
@@ -149,11 +244,14 @@ class QuotesMixin:
         Returns:
             Dictionary containing market hours information
         """
-        url = f"/marketdata/v1/markets/{market_id}"
+        params = {}
         if date:
-            url += f"?date={date.strftime('%Y-%m-%d')}"
+            params["date"] = date.strftime('%Y-%m-%d')
             
-        return self._make_request("GET", url) if hasattr(self, '_make_request') else self._get(url)
+        if hasattr(self, '_make_request'):
+            return self._make_request("GET", f"/marketdata/v1/markets/{market_id}", params=params or None)
+        else:
+            return self._get(f"/marketdata/v1/markets/{market_id}", params=params or None)
     
     # Movers Methods
     def get_movers(self, symbol_id: str, sort: str = "VOLUME", frequency: int = 5) -> Dict[str, Any]:
@@ -167,8 +265,12 @@ class QuotesMixin:
         Returns:
             Dictionary containing top gainers and losers
         """
-        url = f"/marketdata/v1/movers/{symbol_id}?sort={sort}&frequency={frequency}"
-        return self._make_request("GET", url) if hasattr(self, '_make_request') else self._get(url)
+        params = {"sort": sort, "frequency": frequency}
+        
+        if hasattr(self, '_make_request'):
+            return self._make_request("GET", f"/marketdata/v1/movers/{symbol_id}", params=params)
+        else:
+            return self._get(f"/marketdata/v1/movers/{symbol_id}", params=params)
     
     # Instruments Methods
     def search_instruments(
@@ -185,8 +287,12 @@ class QuotesMixin:
         Returns:
             Dictionary containing matching instruments
         """
-        url = f"/marketdata/v1/instruments?symbol={symbol}&projection={projection}"
-        return self._make_request("GET", url) if hasattr(self, '_make_request') else self._get(url)
+        params = {"symbol": symbol, "projection": projection}
+        
+        if hasattr(self, '_make_request'):
+            return self._make_request("GET", "/marketdata/v1/instruments", params=params)
+        else:
+            return self._get("/marketdata/v1/instruments", params=params)
     
     def get_instrument_by_cusip(self, cusip_id: str) -> Dict[str, Any]:
         """Get instrument details by CUSIP.

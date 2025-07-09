@@ -1,7 +1,7 @@
 from typing import List, Optional, Dict
 from datetime import datetime
-from .models.orders import Order, OrderStatus
-from .models.order_validation import OrderValidator, OrderValidationError
+from .models.generated.trading_models import Order, Status as OrderStatus
+from .models.order_validation import OrderValidator, OrderValidationError  # Keep - custom validation
 
 class OrderManagement:
     def __init__(self, client):
