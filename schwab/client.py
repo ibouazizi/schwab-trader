@@ -4,6 +4,7 @@ import requests
 from urllib.parse import urljoin
 from decimal import Decimal
 from .auth import SchwabAuth
+from .dual_auth import DualSchwabAuth
 
 # Import all models from generated packages
 from .models.generated.market_data_models import ErrorResponse, QuoteResponse
@@ -35,21 +36,38 @@ class SchwabClient(QuotesMixin):
         client_id: str,
         client_secret: str,
         redirect_uri: str,
-        auth: Optional['SchwabAuth'] = None
+        auth: Optional['SchwabAuth'] = None,
+        market_data_client_id: Optional[str] = None,
+        market_data_client_secret: Optional[str] = None
     ):
         """Initialize the client with OAuth credentials.
         
         Args:
-            client_id: OAuth client ID
-            client_secret: OAuth client secret
+            client_id: OAuth client ID for Trading API
+            client_secret: OAuth client secret for Trading API
             redirect_uri: OAuth callback URL
             auth: Optional pre-configured SchwabAuth instance
+            market_data_client_id: OAuth client ID for Market Data API (optional)
+            market_data_client_secret: OAuth client secret for Market Data API (optional)
         """
         self.session = requests.Session()
         self.session.headers.update({"Accept": "application/json"})
         
         # Initialize authentication
-        self.auth = auth or SchwabAuth(client_id, client_secret, redirect_uri)
+        if market_data_client_id and market_data_client_secret:
+            # Use dual auth if market data credentials are provided
+            self.dual_auth = DualSchwabAuth(
+                client_id, client_secret, redirect_uri,
+                market_data_client_id, market_data_client_secret
+            )
+            # If auth is provided, set it on the trading auth
+            if auth:
+                self.dual_auth.trading_auth = auth
+            self.auth = self.dual_auth.trading_auth
+        else:
+            # Single auth mode
+            self.dual_auth = None
+            self.auth = auth or SchwabAuth(client_id, client_secret, redirect_uri)
         
         # Initialize order management and monitoring
         self.order_management = OrderManagement(self)
@@ -91,11 +109,16 @@ class SchwabClient(QuotesMixin):
             requests.exceptions.RequestException: If the request fails
                 pass
         """
-        # Ensure we have a valid token
-        self.auth.ensure_valid_token()
-        
-        # Update authorization header
-        self.session.headers.update(self.auth.authorization_header)
+        # Get appropriate auth for the endpoint
+        if self.dual_auth and "/marketdata/" in endpoint:
+            # Use market data auth
+            auth = self.dual_auth.get_auth_for_endpoint(endpoint)
+            self.dual_auth.ensure_market_data_token()
+            self.session.headers.update(auth.authorization_header)
+        else:
+            # Use trading auth
+            self.auth.ensure_valid_token()
+            self.session.headers.update(self.auth.authorization_header)
         
         # Choose base URL based on endpoint
         if endpoint.startswith("/marketdata/"):

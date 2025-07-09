@@ -1591,6 +1591,8 @@ class EnhancedSchwabPortfolioGUI(ctk.CTk):
                 ("separator", None, None),
                 ("Export...", self.export_data, "Ctrl+E"),
                 ("separator", None, None),
+                ("Clear Authentication", self.clear_credentials, None),
+                ("separator", None, None),
                 ("Settings", self.open_settings, "Ctrl+S"),
                 ("separator", None, None),
                 ("Exit", self.on_closing, None)
@@ -2494,7 +2496,6 @@ A professional-grade trading interface for Charles Schwab.
             c = conn.cursor()
             c.execute("SELECT * FROM tokens WHERE api_type='trading' LIMIT 1")
             token_data = c.fetchone()
-            conn.close()
             
             if token_data:
                 # Try to use existing tokens
@@ -2521,15 +2522,51 @@ A professional-grade trading interface for Charles Schwab.
                             "Session expired. Please re-authenticate.",
                             "warning"
                         )
+                        conn.close()
                         self.start_oauth_flow()
                         return
             else:
                 # No tokens, start OAuth flow
+                conn.close()
                 self.start_oauth_flow()
                 return
             
-            # Initialize client
-            self.client = SchwabClient(trading_id, trading_secret, redirect_uri, auth=self.auth)
+            # Check for saved market data token and get a new one if needed
+            if market_id and market_secret:
+                # Check for existing market data token using the same connection
+                c.execute("SELECT * FROM tokens WHERE api_type='market_data' LIMIT 1")
+                market_token_data = c.fetchone()
+                
+                if not market_token_data or not market_token_data[2]:
+                    # No market data token, get one using client credentials
+                    try:
+                        print(f"Getting market data token using client credentials...")
+                        market_data_auth = SchwabAuth(market_id, market_secret, redirect_uri)
+                        market_data_auth.get_client_credentials_token()
+                        print(f"Got market data token: {market_data_auth.access_token[:30]}...")
+                        # Save the market data token
+                        self.save_tokens(market_data_auth)
+                        print("Market data token saved successfully")
+                    except Exception as e:
+                        print(f"ERROR getting market data token: {str(e)}")
+                        ToastNotification.show_toast(
+                            self, 
+                            f"Warning: Could not get market data token: {str(e)}", 
+                            "warning"
+                        )
+                else:
+                    print(f"Using existing market data token from database")
+            
+            # Close the database connection
+            conn.close()
+            
+            # Initialize client with both trading and market data credentials
+            self.client = SchwabClient(
+                trading_id, trading_secret, redirect_uri, 
+                auth=self.auth,
+                market_data_client_id=market_id,
+                market_data_client_secret=market_secret
+            )
             
             # Get accounts
             account_numbers = self.client.get_account_numbers()
@@ -2722,7 +2759,7 @@ A professional-grade trading interface for Charles Schwab.
         )
         cancel_button.pack(side="left")
     
-    def save_tokens(self):
+    def save_tokens(self, market_data_auth=None):
         """Save tokens to database."""
         try:
             conn = sqlite3.connect(DB_PATH)
@@ -2731,7 +2768,7 @@ A professional-grade trading interface for Charles Schwab.
             # Clear existing tokens
             c.execute("DELETE FROM tokens WHERE api_type='trading'")
             
-            # Insert new tokens
+            # Insert trading tokens
             c.execute("""
                 INSERT INTO tokens (api_type, access_token, refresh_token, expiry)
                 VALUES (?, ?, ?, ?)
@@ -2741,6 +2778,19 @@ A professional-grade trading interface for Charles Schwab.
                 self.auth.refresh_token,
                 self.auth.token_expiry.isoformat() if self.auth.token_expiry else ""
             ))
+            
+            # Save market data token if provided
+            if market_data_auth and market_data_auth.access_token:
+                c.execute("DELETE FROM tokens WHERE api_type='market_data'")
+                c.execute("""
+                    INSERT INTO tokens (api_type, access_token, refresh_token, expiry)
+                    VALUES (?, ?, ?, ?)
+                """, (
+                    "market_data",
+                    market_data_auth.access_token,
+                    market_data_auth.refresh_token or "",
+                    market_data_auth.token_expiry.isoformat() if market_data_auth.token_expiry else ""
+                ))
             
             conn.commit()
             conn.close()
@@ -2758,6 +2808,40 @@ A professional-grade trading interface for Charles Schwab.
         except Exception as e:
             pass
     
+    def clear_credentials(self):
+        """Clear all saved credentials and tokens, then show auth dialog."""
+        try:
+            # First disconnect if connected
+            if self.client:
+                self.disconnect_from_schwab()
+            
+            # Clear all authentication data from database
+            conn = sqlite3.connect(DB_PATH)
+            c = conn.cursor()
+            
+            # Clear credentials
+            c.execute("DELETE FROM credentials")
+            
+            # Clear tokens
+            c.execute("DELETE FROM tokens")
+            
+            conn.commit()
+            conn.close()
+            
+            # Show success message
+            ToastNotification.show_toast(
+                self,
+                "Authentication data cleared successfully",
+                "success"
+            )
+            
+            # Show authentication dialog
+            self.show_auth_dialog()
+            
+        except Exception as e:
+            self.show_error(f"Failed to clear credentials: {str(e)}")
+    
+    
     def finalize_connection(self):
         """Finalize the connection after successful authentication."""
         try:
@@ -2769,12 +2853,37 @@ A professional-grade trading interface for Charles Schwab.
             conn.close()
             
             if creds:
-                # Initialize client with authenticated auth
-                # Use trading credentials from correct columns
+                # Get credentials from correct columns
                 trading_id = creds[6] or creds[2]
                 trading_secret = creds[7] or creds[3]
                 redirect_uri = creds[4] or 'https://localhost:8443/callback'
-                self.client = SchwabClient(trading_id, trading_secret, redirect_uri, auth=self.auth)
+                market_data_id = creds[8]
+                market_data_secret = creds[9]
+                
+                # Get market data token if credentials are provided
+                market_data_auth = None
+                if market_data_id and market_data_secret:
+                    try:
+                        # Create auth handler for market data
+                        market_data_auth = SchwabAuth(market_data_id, market_data_secret, redirect_uri)
+                        # Get token using client credentials grant
+                        market_data_auth.get_client_credentials_token()
+                        # Save the market data token
+                        self.save_tokens(market_data_auth)
+                    except Exception as e:
+                        ToastNotification.show_toast(
+                            self, 
+                            f"Warning: Could not get market data token: {str(e)}", 
+                            "warning"
+                        )
+                
+                # Initialize client with both auth handlers
+                self.client = SchwabClient(
+                    trading_id, trading_secret, redirect_uri, 
+                    auth=self.auth,
+                    market_data_client_id=market_data_id,
+                    market_data_client_secret=market_data_secret
+                )
                 
                 # Get accounts
                 account_numbers = self.client.get_account_numbers()
@@ -2911,13 +3020,17 @@ A professional-grade trading interface for Charles Schwab.
                             quotes_response = self.client.get_quotes(list(self.watched_symbols))
                             
                             # Process each quote
-                            if hasattr(quotes_response, 'items'):
-                                for symbol, quote_data in quotes_response.items():
-                                    self.update_queue.put({
-                                        "type": "quote",
-                                        "data": {"symbol": symbol, "quote": quote_data}
-                                    })
+                            if hasattr(quotes_response, 'root') and quotes_response.root:
+                                for symbol, quote_data in quotes_response.root.items():
+                                    # The quote_data is a QuoteResponseObject with a root attribute
+                                    if hasattr(quote_data, 'root'):
+                                        actual_quote = quote_data.root
+                                        self.update_queue.put({
+                                            "type": "quote",
+                                            "data": {"symbol": symbol, "quote": actual_quote}
+                                        })
                         except Exception as e:
+                            print(f"ERROR fetching quotes: {str(e)}")
                             # Ignore datetime validation errors from the API
                             if "datetime" in str(e) and "pattern" in str(e):
                                 pass
@@ -4118,9 +4231,9 @@ A professional-grade trading interface for Charles Schwab.
             # Check for quote subobject
             if hasattr(quote, 'quote'):
                 q = quote.quote
-                price = getattr(q, 'last', 0) or getattr(q, 'lastPrice', 0) or getattr(q, 'regularMarketLastPrice', 0)
-                change = getattr(q, 'netChange', 0) or getattr(q, 'regularMarketNetChange', 0)
-                change_pct = getattr(q, 'percentChange', 0) or getattr(q, 'regularMarketPercentChange', 0)
+                price = getattr(q, 'last_price', 0) or getattr(q, 'lastPrice', 0) or getattr(q, 'last', 0) or 0
+                change = getattr(q, 'net_change', 0) or getattr(q, 'netChange', 0) or 0
+                change_pct = getattr(q, 'net_percent_change', 0) or getattr(q, 'percentChange', 0) or 0
             elif isinstance(quote, dict):
                 # Handle dict response
                 if 'quote' in quote:

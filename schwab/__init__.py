@@ -5,6 +5,7 @@ This library provides a clean and Pythonic interface to Charles Schwab's Trading
 
 from .client import SchwabClient
 from .auth import SchwabAuth
+from .dual_auth import DualSchwabAuth
 from .async_client import AsyncSchwabClient
 from .streaming import (
     StreamerClient, StreamerService, QOSLevel,
@@ -19,6 +20,7 @@ __all__ = [
     "SchwabClient", 
     "AsyncSchwabClient", 
     "SchwabAuth",
+    "DualSchwabAuth",
     "StreamerClient",
     "StreamerService",
     "QOSLevel",
