@@ -11,8 +11,11 @@ import sys
 import webbrowser
 from urllib.parse import urlparse, parse_qs
 
-# Add parent directory to path if needed
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add parent directory to path for schwab imports
+# Add examples directory to path for credential_manager imports
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)
 
 from schwab import SchwabAuth
 from credential_manager import CredentialManager

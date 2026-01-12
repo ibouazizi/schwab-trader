@@ -228,7 +228,10 @@ def get_portfolio_analysis(self, account_numbers: Optional[List[str]] = None) ->
     """
     if not account_numbers:
         accounts_data = self.get_account_numbers()
-        account_numbers = [acc.account_number for acc in accounts_data.accounts]
+        if accounts_data and accounts_data.accounts:
+            account_numbers = [acc.account_number for acc in accounts_data.accounts]
+        else:
+            account_numbers = []
     
     analysis = {
         "total_delta": Decimal("0"),

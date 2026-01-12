@@ -3,6 +3,15 @@
 Quick script to check if credentials are properly stored in the database
 """
 
+import os
+import sys
+
+# Add parent directory to path for schwab imports
+# Add examples directory to path for credential_manager imports
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)
+
 from credential_manager import CredentialManager
 
 def main():

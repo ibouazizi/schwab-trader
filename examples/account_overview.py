@@ -10,12 +10,20 @@ This script provides a comprehensive overview of your Schwab account including:
 """
 
 import os
+import sys
 import webbrowser
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Dict, List
 from tabulate import tabulate
+
+# Add parent directory to path for schwab imports
+# Add examples directory to path for credential_manager imports
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)
+
 from schwab import SchwabClient, SchwabAuth
 from schwab.models.orders import Order, OrderStatus, OrderType, OrderInstruction
 from credential_manager import CredentialManager

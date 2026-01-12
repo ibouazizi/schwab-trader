@@ -52,13 +52,14 @@ class PaperAccountManager:
         """
         all_accounts = self.client.get_account_numbers()
         paper_accounts = []
-        
-        for account in all_accounts.accounts:
-            if self.is_paper_account(account):
-                paper_accounts.append(account)
-                
+
+        if all_accounts and all_accounts.accounts:
+            for account in all_accounts.accounts:
+                if self.is_paper_account(account):
+                    paper_accounts.append(account)
+
         return paper_accounts
-    
+
     def is_paper_account(self, account: AccountNumber) -> bool:
         """
         Check if an account is a paper trading account.
@@ -97,13 +98,14 @@ class PaperAccountManager:
         """
         all_accounts = await self.client.get_account_numbers()
         paper_accounts = []
-        
-        for account in all_accounts.accounts:
-            if self.is_paper_account(account):
-                paper_accounts.append(account)
-                
+
+        if all_accounts and all_accounts.accounts:
+            for account in all_accounts.accounts:
+                if self.is_paper_account(account):
+                    paper_accounts.append(account)
+
         return paper_accounts
-    
+
     def get_paper_account_balances(self, include_positions: bool = False) -> Dict[str, Any]:
         """
         Get balances for all paper trading accounts.

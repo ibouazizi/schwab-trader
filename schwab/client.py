@@ -224,6 +224,8 @@ class SchwabClient(QuotesMixin):
     def get_account_numbers(self) -> AccountNumbers:
         """Get list of account numbers and their encrypted values."""
         data = self._make_request("GET", "/accounts/accountNumbers")
+        if not data:
+            return AccountNumbers(accounts=[])
         return AccountNumbers(accounts=[AccountNumber(**account) for account in data])
     
     def get_accounts(self, include_positions: bool = False) -> List[Account]:
@@ -241,20 +243,27 @@ class SchwabClient(QuotesMixin):
             "/accounts",
             params=params
         )
+        if not data:
+            return []
         return [Account(**account) for account in data]
     
     def get_account(self, account_number: str, include_positions: bool = False) -> Account:
         """Get specific account information.
-        
+
         Args:
             account_number: The encrypted account number
             include_positions: Whether to include position information
-            
+
         Returns:
             Account information
+
+        Raises:
+            ValueError: If no account data is returned
         """
         params = {"fields": "positions"} if include_positions else None
         data = self._make_request("GET", f"/accounts/{account_number}", params=params)
+        if not data:
+            raise ValueError(f"No data returned for account {account_number}")
         return Account(**data)
     
     def get_orders(
@@ -287,8 +296,10 @@ class SchwabClient(QuotesMixin):
             params["status"] = status
             
         data = self._make_request("GET", f"/accounts/{account_number}/orders", params=params)
+        if not data:
+            return []
         return [Order(**order) for order in data]
-        
+
     def place_order(self, account_number: str, order: Order) -> None:
         """Place an order for a specific account.
         
@@ -517,8 +528,10 @@ class SchwabClient(QuotesMixin):
             params["symbol"] = symbol
             
         data = self._make_request("GET", f"/accounts/{account_number}/transactions", params=params)
+        if not data:
+            return []
         return [Transaction(**txn) for txn in data]
-        
+
     def get_transaction(self, account_number: str, transaction_id: int) -> Transaction:
         """Get details of a specific transaction.
         
@@ -603,8 +616,10 @@ class SchwabClient(QuotesMixin):
             params["status"] = status
             
         data = self._make_request("GET", "/orders", params=params)
+        if not data:
+            return []
         return [Order(**order) for order in data]
-        
+
     def create_market_order(
         self,
         symbol: str,

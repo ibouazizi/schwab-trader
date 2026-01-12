@@ -69,15 +69,16 @@ class PaperTradingClientMixin:
         # First, handle the case where we have a hash value instead of an account number
         # by finding the corresponding account number
         accounts = self.get_account_numbers()
-        for account in accounts.accounts:
-            if account.hash_value == account_number:
-                return self._paper_account_manager.is_paper_account(account)
-                
+        if accounts and accounts.accounts:
+            for account in accounts.accounts:
+                if account.hash_value == account_number:
+                    return self._paper_account_manager.is_paper_account(account)
+
         # If we have the actual account number, create a temporary AccountNumber object
-        
+
         temp_account = AccountNumber(account_number=account_number, hash_value="")
         return self._paper_account_manager.is_paper_account(temp_account)
-    
+
     @paper_trading_check
     def place_order(self, account_number: str, order):
         """
@@ -200,15 +201,16 @@ class AsyncPaperTradingClientMixin:
         # First, handle the case where we have a hash value instead of an account number
         # by finding the corresponding account number
         accounts = await self.get_account_numbers()
-        for account in accounts.accounts:
-            if account.hash_value == account_number:
-                return self._paper_account_manager.is_paper_account(account)
-                
+        if accounts and accounts.accounts:
+            for account in accounts.accounts:
+                if account.hash_value == account_number:
+                    return self._paper_account_manager.is_paper_account(account)
+
         # If we have the actual account number, create a temporary AccountNumber object
-        
+
         temp_account = AccountNumber(account_number=account_number, hash_value="")
         return self._paper_account_manager.is_paper_account(temp_account)
-    
+
     @paper_trading_check
     async def place_order(self, account_number: str, order):
         """

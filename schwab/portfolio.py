@@ -121,8 +121,8 @@ class PortfolioManager:
             # Extract positions from securities_account
             sec_acct = getattr(account, 'securities_account', None)
             if sec_acct is not None and hasattr(sec_acct, 'positions'):
-                positions_list = getattr(sec_acct, 'positions', [])
-                
+                positions_list = getattr(sec_acct, 'positions', None) or []
+
                 for position in positions_list:
                     symbol = self._extract_symbol_from_position(position)
                     if symbol:
@@ -158,8 +158,8 @@ class PortfolioManager:
             # Extract positions from securities_account
             sec_acct = getattr(account, 'securities_account', None)
             if sec_acct is not None and hasattr(sec_acct, 'positions'):
-                positions_list = getattr(sec_acct, 'positions', [])
-                
+                positions_list = getattr(sec_acct, 'positions', None) or []
+
                 for position in positions_list:
                     symbol = self._extract_symbol_from_position(position)
                     if symbol:
@@ -189,8 +189,8 @@ class PortfolioManager:
                     # Extract positions from securities_account
                     sec_acct = getattr(account, 'securities_account', None)
                     if sec_acct is not None:
-                        positions_list = getattr(sec_acct, 'positions', [])
-                        
+                        positions_list = getattr(sec_acct, 'positions', None) or []
+
                         if positions_list:
 
                             for position in positions_list:
@@ -405,24 +405,26 @@ class PortfolioManager:
         
         # Find the order we just placed (should be the most recent one)
         placed_order = None
-        for order_item in recent_orders.orders:
-            if (order_item.order_type == order.order_type and
-                order_item.quantity == order.quantity):
-                placed_order = order_item
-                break
-        
+        # get_orders returns a list of Order objects directly
+        if recent_orders:
+            for order_item in recent_orders:
+                if (order_item.order_type == order.order_type and
+                    order_item.quantity == order.quantity):
+                    placed_order = order_item
+                    break
+
         if not placed_order:
 
             return 0
-            
+
         order_id = placed_order.order_id
-        
+
         with self._lock:
             # Store the order
             self._orders[order_id] = placed_order
             # Add to monitoring
             self._monitored_orders.add(order_id)
-            
+
         # Start monitoring if not already
         if not self._monitoring:
             self._start_monitoring()
@@ -471,24 +473,26 @@ class PortfolioManager:
         
         # Find the order we just placed (should be the most recent one)
         placed_order = None
-        for order_item in recent_orders.orders:
-            if (order_item.order_type == order.order_type and
-                order_item.quantity == order.quantity):
-                placed_order = order_item
-                break
-        
+        # get_orders returns a list of Order objects directly
+        if recent_orders:
+            for order_item in recent_orders:
+                if (order_item.order_type == order.order_type and
+                    order_item.quantity == order.quantity):
+                    placed_order = order_item
+                    break
+
         if not placed_order:
 
             return 0
-            
+
         order_id = placed_order.order_id
-        
+
         with self._lock:
             # Store the order
             self._orders[order_id] = placed_order
             # Add to monitoring
             self._monitored_orders.add(order_id)
-            
+
         # Start monitoring if not already
         if not self._monitoring:
             await self._start_monitoring_async()
@@ -1280,7 +1284,7 @@ class PortfolioManager:
                     self._positions[account_number] = {}
                     sec_acct = getattr(account, 'securities_account', None)
                     if sec_acct is not None and hasattr(sec_acct, 'positions'):
-                        positions_list = getattr(sec_acct, 'positions', [])
+                        positions_list = getattr(sec_acct, 'positions', None) or []
                         for position in positions_list:
                             symbol = self._extract_symbol_from_position(position)
                             if symbol:
