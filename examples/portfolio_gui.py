@@ -2570,10 +2570,15 @@ A professional-grade trading interface for Charles Schwab.
             
             # Get accounts
             account_numbers = self.client.get_account_numbers()
+            if not account_numbers.accounts:
+                messagebox.showwarning("No Accounts", "No accounts found. Please verify your credentials and ensure your Schwab account is properly linked.")
+                self.status_bar.update_connection_status(False, "No accounts")
+                return
+
             # Store both account numbers and hash values
             self.account_data = [(acc.account_number, acc.hash_value) for acc in account_numbers.accounts]
             self.accounts = [acc.hash_value for acc in account_numbers.accounts]  # Use hash values for API calls
-            
+
             # Update account menu
             if self.accounts:
                 self.account_menu.configure(values=[f"*{acc[0][-4:]}" for acc in self.account_data])
@@ -2605,11 +2610,13 @@ A professional-grade trading interface for Charles Schwab.
             self.refresh_data()
             
             ToastNotification.show_toast(self, "Connected to Schwab successfully!", "success", duration=3000)
-            
+
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # Print full traceback to console
             messagebox.showerror("Connection Error", f"Failed to connect: {str(e)}")
             self.status_bar.update_connection_status(False, "Failed")
-    
+
     def start_oauth_flow(self):
         """Start the OAuth authentication flow."""
         # Get authorization URL
@@ -2887,9 +2894,14 @@ A professional-grade trading interface for Charles Schwab.
                 
                 # Get accounts
                 account_numbers = self.client.get_account_numbers()
+                if not account_numbers.accounts:
+                    messagebox.showwarning("No Accounts", "No accounts found. Please verify your credentials and ensure your Schwab account is properly linked.")
+                    self.status_bar.update_connection_status(False, "No accounts")
+                    return
+
                 self.account_data = [(acc.account_number, acc.hash_value) for acc in account_numbers.accounts]
                 self.accounts = [acc.hash_value for acc in account_numbers.accounts]
-                
+
                 # Update account menu
                 if self.accounts:
                     self.account_menu.configure(values=[f"*{acc[0][-4:]}" for acc in self.account_data])
@@ -2919,9 +2931,11 @@ A professional-grade trading interface for Charles Schwab.
                 ToastNotification.show_toast(self, "Connected to Schwab successfully!", "success", duration=3000)
                 
         except Exception as e:
+            import traceback
+            traceback.print_exc()  # Print full traceback to console
             messagebox.showerror("Connection Error", f"Failed to connect: {str(e)}")
             self.status_bar.update_connection_status(False, "Failed")
-    
+
     def refresh_data(self):
         """Refresh all data."""
         if self.client and self.portfolio_manager:

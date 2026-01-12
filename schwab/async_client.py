@@ -88,6 +88,8 @@ class AsyncSchwabClient(QuotesMixin):
     async def get_account_numbers(self) -> AccountNumbers:
         """Get list of account numbers and their encrypted values."""
         data = await self._make_request("GET", "/accounts/accountNumbers")
+        if not data:
+            return AccountNumbers(accounts=[])
         return AccountNumbers(accounts=[AccountNumber(**account) for account in data])
     
     async def get_accounts(self, include_positions: bool = False) -> List[Account]:
@@ -101,20 +103,27 @@ class AsyncSchwabClient(QuotesMixin):
         """
         params = {"fields": "positions"} if include_positions else None
         data = await self._make_request("GET", "/accounts", params=params)
+        if not data:
+            return []
         return [Account(**account) for account in data]
     
     async def get_account(self, account_number: str, include_positions: bool = False) -> Account:
         """Get specific account information.
-        
+
         Args:
             account_number: The encrypted account number
             include_positions: Whether to include position information
-            
+
         Returns:
             Account information
+
+        Raises:
+            ValueError: If no account data is returned
         """
         params = {"fields": "positions"} if include_positions else None
         data = await self._make_request("GET", f"/accounts/{account_number}", params=params)
+        if not data:
+            raise ValueError(f"No data returned for account {account_number}")
         return Account(**data)
     
     async def get_orders(
@@ -147,8 +156,10 @@ class AsyncSchwabClient(QuotesMixin):
             params["status"] = status
             
         data = await self._make_request("GET", f"/accounts/{account_number}/orders", params=params)
+        if not data:
+            return []
         return [Order(**order) for order in data]
-        
+
     async def place_order(self, account_number: str, order: Order) -> None:
         """Place an order for a specific account.
         

@@ -17,8 +17,11 @@ from datetime import datetime
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, parse_qs
 
-# Add the parent directory to the path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add parent directory to path for schwab imports
+# Add examples directory to path for credential_manager imports
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)
 
 from schwab.auth import SchwabAuth
 from schwab.client import SchwabClient

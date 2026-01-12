@@ -13,8 +13,11 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 from tabulate import tabulate
 
-# Add parent directory to path if needed
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Add parent directory to path for schwab imports
+# Add examples directory to path for credential_manager imports
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)
 
 from schwab import AsyncSchwabClient, SchwabAuth
 from schwab.models.generated.trading_models import Account, Position, Status as OrderStatus

@@ -1499,7 +1499,7 @@ class Account(BaseModel):
         positions_dict = {}
         try:
             if hasattr(self, 'securities_account') and self.securities_account:
-                if hasattr(self.securities_account, 'positions'):
+                if hasattr(self.securities_account, 'positions') and self.securities_account.positions:
                     for position in self.securities_account.positions:
                         symbol = None
                         if hasattr(position, 'instrument'):

@@ -9,6 +9,7 @@ without API access.
 """
 
 import os
+import sys
 import webbrowser
 import logging
 from urllib.parse import urlparse, parse_qs
@@ -16,6 +17,12 @@ from datetime import datetime, timedelta
 import time
 from decimal import Decimal
 from tabulate import tabulate
+
+# Add parent directory to path for schwab imports
+# Add examples directory to path for credential_manager imports
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)
 
 from schwab import SchwabClient, SchwabAuth, PortfolioManager
 from schwab.paper_trading.client import PaperTradingClient

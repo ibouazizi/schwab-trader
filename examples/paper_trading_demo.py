@@ -8,12 +8,19 @@ without using real money.
 """
 
 import os
+import sys
 import webbrowser
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
 import logging
 from tabulate import tabulate
 from time import sleep
+
+# Add parent directory to path for schwab imports
+# Add examples directory to path for credential_manager imports
+_script_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(_script_dir))
+sys.path.insert(0, _script_dir)
 
 from schwab.paper_trading.client import PaperTradingClient
 from schwab.paper_trading.account import PaperAccountManager
