@@ -314,7 +314,7 @@ class SchwabClient(QuotesMixin):
             requests.exceptions.RequestException: If the request fails
                 pass
         """
-        self._make_request("POST", f"/accounts/{account_number}/orders", json=order.model_dump(by_alias=True))
+        self._make_request("POST", f"/accounts/{account_number}/orders", json=order.model_dump(by_alias=True, mode="json", exclude_none=True))
         
     def preview_order(self, account_number: str, order: Order) -> Dict[str, Any]:
         """Preview an order before placing it.
@@ -339,7 +339,7 @@ class SchwabClient(QuotesMixin):
         data = self._make_request(
             "POST", 
             f"/accounts/{account_number}/previewOrder", 
-            json=order.model_dump(by_alias=True)
+            json=order.model_dump(by_alias=True, mode="json", exclude_none=True)
         )
         return data
         
@@ -363,7 +363,7 @@ class SchwabClient(QuotesMixin):
         self._make_request(
             "PUT",
             f"/accounts/{account_number}/orders/{order_id}",
-            json=new_order.model_dump(by_alias=True)
+            json=new_order.model_dump(by_alias=True, mode="json", exclude_none=True)
         )
         
     def cancel_order(self, account_number: str, order_id: int) -> None:
