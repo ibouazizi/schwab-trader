@@ -61,7 +61,7 @@ def create_stop_limit_order(
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
+                quantity_type=QuantityType.shares,
                 div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
@@ -126,7 +126,7 @@ def create_trailing_stop_order(
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
+                quantity_type=QuantityType.shares,
                 div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
@@ -182,7 +182,7 @@ def create_market_on_close_order(
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
+                quantity_type=QuantityType.shares,
                 div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
@@ -242,7 +242,7 @@ def create_limit_on_close_order(
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
+                quantity_type=QuantityType.shares,
                 div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
