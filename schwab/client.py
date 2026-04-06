@@ -11,8 +11,8 @@ from .models.generated.market_data_models import ErrorResponse, QuoteResponse
 from .models.generated.trading_models import (
     AccountNumberHash as AccountNumber, Account,
     Order, OrderType, Session as OrderSession,
-    Duration as OrderDuration, RequestedDestination, 
-    ComplexOrderStrategyType, OrderStrategyType, OrderLeg, OrderLegType,
+    Duration as OrderDuration, RequestedDestination,
+    ComplexOrderStrategyType, OrderStrategyType, OrderLeg, OrderLegCollection, OrderLegType,
     PositionEffect, StopPriceLinkBasis,
     StopPriceLinkType, StopType, Instruction as OrderInstruction,
     TaxLotMethod, SpecialInstruction,
@@ -664,7 +664,7 @@ class SchwabClient(QuotesMixin):
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={
@@ -731,7 +731,7 @@ class SchwabClient(QuotesMixin):
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={
@@ -801,7 +801,7 @@ class SchwabClient(QuotesMixin):
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={
@@ -1012,7 +1012,7 @@ def create_stop_limit_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -1082,7 +1082,7 @@ def create_trailing_stop_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -1143,7 +1143,7 @@ def create_market_on_close_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -1208,7 +1208,7 @@ def create_market_on_close_order(
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={

@@ -53,7 +53,7 @@ def create_stop_limit_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -123,7 +123,7 @@ def create_trailing_stop_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -184,7 +184,7 @@ def create_market_on_close_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -249,7 +249,7 @@ def create_limit_on_close_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
