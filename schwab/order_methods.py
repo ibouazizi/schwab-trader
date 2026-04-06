@@ -41,8 +41,6 @@ def create_stop_limit_order(
         order_type=OrderType.STOP_LIMIT,
         complex_order_strategy_type=ComplexOrderStrategyType.NONE,
         quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
         requested_destination=requested_destination,
         stop_price=stop_price,
         stop_price_link_basis=StopPriceLinkBasis.MANUAL,
@@ -58,10 +56,7 @@ def create_stop_limit_order(
                 leg_id=1,
                 instrument={
                     "symbol": symbol,
-                    "description": description or symbol,
-                    "instrument_id": instrument_id or 0,
-                    "net_change": Decimal("0"),
-                    "type": "EQUITY"
+                    "assetType": "EQUITY",
                 },
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
@@ -112,8 +107,6 @@ def create_trailing_stop_order(
         order_type=OrderType.TRAILING_STOP,
         complex_order_strategy_type=ComplexOrderStrategyType.NONE,
         quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
         requested_destination=requested_destination,
         stop_price_offset=stop_price_offset,
         stop_price_link_basis=StopPriceLinkBasis.MANUAL,
@@ -128,10 +121,7 @@ def create_trailing_stop_order(
                 leg_id=1,
                 instrument={
                     "symbol": symbol,
-                    "description": description or symbol,
-                    "instrument_id": instrument_id or 0,
-                    "net_change": Decimal("0"),
-                    "type": "EQUITY"
+                    "assetType": "EQUITY",
                 },
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
@@ -177,8 +167,6 @@ def create_market_on_close_order(
         order_type=OrderType.MARKET_ON_CLOSE,
         complex_order_strategy_type=ComplexOrderStrategyType.NONE,
         quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
         requested_destination=requested_destination,
         tax_lot_method=tax_lot_method,
         special_instruction=special_instruction,
@@ -189,10 +177,7 @@ def create_market_on_close_order(
                 leg_id=1,
                 instrument={
                     "symbol": symbol,
-                    "description": description or symbol,
-                    "instrument_id": instrument_id or 0,
-                    "net_change": Decimal("0"),
-                    "type": "EQUITY"
+                    "assetType": "EQUITY",
                 },
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
@@ -241,8 +226,6 @@ def create_limit_on_close_order(
         order_type=OrderType.LIMIT_ON_CLOSE,
         complex_order_strategy_type=ComplexOrderStrategyType.NONE,
         quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
         requested_destination=requested_destination,
         price=limit_price,
         tax_lot_method=tax_lot_method,
@@ -254,10 +237,7 @@ def create_limit_on_close_order(
                 leg_id=1,
                 instrument={
                     "symbol": symbol,
-                    "description": description or symbol,
-                    "instrument_id": instrument_id or 0,
-                    "net_change": Decimal("0"),
-                    "type": "EQUITY"
+                    "assetType": "EQUITY",
                 },
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
