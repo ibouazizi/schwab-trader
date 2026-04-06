@@ -157,7 +157,11 @@ class SchwabClient(QuotesMixin):
                 pass
         
         response.raise_for_status()
-        
+
+        # Successful responses with no body (e.g. 201 Created from place_order)
+        if not response.content or response.status_code == 201:
+            return {}
+
         # Parse the JSON response
         try:
             response_text = response.text
