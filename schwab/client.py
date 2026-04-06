@@ -678,7 +678,7 @@ class SchwabClient(QuotesMixin):
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
                     quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
@@ -745,7 +745,7 @@ class SchwabClient(QuotesMixin):
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
                     quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
@@ -815,7 +815,7 @@ class SchwabClient(QuotesMixin):
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
                     quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
@@ -1026,7 +1026,7 @@ def create_stop_limit_order(
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
                 quantity_type=QuantityType.ALL_SHARES,
-                div_cap_gains=DividendCapitalGains.REINVEST
+                div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
     )
@@ -1096,7 +1096,7 @@ def create_trailing_stop_order(
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
                 quantity_type=QuantityType.ALL_SHARES,
-                div_cap_gains=DividendCapitalGains.REINVEST
+                div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
     )
@@ -1157,7 +1157,7 @@ def create_market_on_close_order(
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
                 quantity_type=QuantityType.ALL_SHARES,
-                div_cap_gains=DividendCapitalGains.REINVEST
+                div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
     )
@@ -1222,7 +1222,7 @@ def create_market_on_close_order(
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
                     quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
