@@ -11,8 +11,8 @@ from .models.generated.market_data_models import ErrorResponse, QuoteResponse
 from .models.generated.trading_models import (
     AccountNumberHash as AccountNumber, Account,
     Order, OrderType, Session as OrderSession,
-    Duration as OrderDuration, RequestedDestination, 
-    ComplexOrderStrategyType, OrderStrategyType, OrderLeg, OrderLegType,
+    Duration as OrderDuration, RequestedDestination,
+    ComplexOrderStrategyType, OrderStrategyType, OrderLeg, OrderLegCollection, OrderLegType,
     PositionEffect, StopPriceLinkBasis,
     StopPriceLinkType, StopType, Instruction as OrderInstruction,
     TaxLotMethod, SpecialInstruction,
@@ -157,7 +157,11 @@ class SchwabClient(QuotesMixin):
                 pass
         
         response.raise_for_status()
-        
+
+        # Successful responses with no body (e.g. 201 Created from place_order)
+        if not response.content or response.status_code == 201:
+            return {}
+
         # Parse the JSON response
         try:
             response_text = response.text
@@ -314,7 +318,7 @@ class SchwabClient(QuotesMixin):
             requests.exceptions.RequestException: If the request fails
                 pass
         """
-        self._make_request("POST", f"/accounts/{account_number}/orders", json=order.model_dump(by_alias=True))
+        self._make_request("POST", f"/accounts/{account_number}/orders", json=order.model_dump(by_alias=True, mode="json", exclude_none=True))
         
     def preview_order(self, account_number: str, order: Order) -> Dict[str, Any]:
         """Preview an order before placing it.
@@ -339,7 +343,7 @@ class SchwabClient(QuotesMixin):
         data = self._make_request(
             "POST", 
             f"/accounts/{account_number}/previewOrder", 
-            json=order.model_dump(by_alias=True)
+            json=order.model_dump(by_alias=True, mode="json", exclude_none=True)
         )
         return data
         
@@ -363,7 +367,7 @@ class SchwabClient(QuotesMixin):
         self._make_request(
             "PUT",
             f"/accounts/{account_number}/orders/{order_id}",
-            json=new_order.model_dump(by_alias=True)
+            json=new_order.model_dump(by_alias=True, mode="json", exclude_none=True)
         )
         
     def cancel_order(self, account_number: str, order_id: int) -> None:
@@ -657,28 +661,23 @@ class SchwabClient(QuotesMixin):
             order_type=OrderType.MARKET,
             complex_order_strategy_type=ComplexOrderStrategyType.NONE,
             quantity=quantity,
-            filled_quantity=Decimal("0"),
-            remaining_quantity=quantity,
             requested_destination=requested_destination,
             tax_lot_method=tax_lot_method,
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={
                         "symbol": symbol,
-                        "description": description or symbol,
-                        "instrument_id": instrument_id or 0,
-                        "net_change": Decimal("0"),
-                        "type": "EQUITY"
+                        "assetType": "EQUITY",
                     },
                     instruction=instruction,
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
-                    quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    quantity_type=QuantityType.shares,
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
@@ -723,29 +722,24 @@ class SchwabClient(QuotesMixin):
             order_type=OrderType.LIMIT,
             complex_order_strategy_type=ComplexOrderStrategyType.NONE,
             quantity=quantity,
-            filled_quantity=Decimal("0"),
-            remaining_quantity=quantity,
             requested_destination=requested_destination,
             price=limit_price,
             tax_lot_method=tax_lot_method,
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={
                         "symbol": symbol,
-                        "description": description or symbol,
-                        "instrument_id": instrument_id or 0,
-                        "net_change": Decimal("0"),
-                        "type": "EQUITY"
+                        "assetType": "EQUITY",
                     },
                     instruction=instruction,
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
-                    quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    quantity_type=QuantityType.shares,
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
@@ -790,8 +784,6 @@ class SchwabClient(QuotesMixin):
             order_type=OrderType.STOP,
             complex_order_strategy_type=ComplexOrderStrategyType.NONE,
             quantity=quantity,
-            filled_quantity=Decimal("0"),
-            remaining_quantity=quantity,
             requested_destination=requested_destination,
             stop_price=stop_price,
             stop_price_link_basis=StopPriceLinkBasis.MANUAL,
@@ -801,21 +793,18 @@ class SchwabClient(QuotesMixin):
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={
                         "symbol": symbol,
-                        "description": description or symbol,
-                        "instrument_id": instrument_id or 0,
-                        "net_change": Decimal("0"),
-                        "type": "EQUITY"
+                        "assetType": "EQUITY",
                     },
                     instruction=instruction,
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
-                    quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    quantity_type=QuantityType.shares,
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
@@ -1000,8 +989,6 @@ def create_stop_limit_order(
         order_type=OrderType.STOP_LIMIT,
         complex_order_strategy_type=ComplexOrderStrategyType.NONE,
         quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
         requested_destination=requested_destination,
         stop_price=stop_price,
         stop_price_link_basis=StopPriceLinkBasis.MANUAL,
@@ -1012,7 +999,7 @@ def create_stop_limit_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -1025,8 +1012,8 @@ def create_stop_limit_order(
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
-                div_cap_gains=DividendCapitalGains.REINVEST
+                quantity_type=QuantityType.shares,
+                div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
     )
@@ -1071,8 +1058,6 @@ def create_trailing_stop_order(
         order_type=OrderType.TRAILING_STOP,
         complex_order_strategy_type=ComplexOrderStrategyType.NONE,
         quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
         requested_destination=requested_destination,
         stop_price_offset=stop_price_offset,
         stop_price_link_basis=StopPriceLinkBasis.MANUAL,
@@ -1082,7 +1067,7 @@ def create_trailing_stop_order(
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -1095,8 +1080,8 @@ def create_trailing_stop_order(
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
-                div_cap_gains=DividendCapitalGains.REINVEST
+                quantity_type=QuantityType.shares,
+                div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
     )
@@ -1136,14 +1121,12 @@ def create_market_on_close_order(
         order_type=OrderType.MARKET_ON_CLOSE,
         complex_order_strategy_type=ComplexOrderStrategyType.NONE,
         quantity=quantity,
-        filled_quantity=Decimal("0"),
-        remaining_quantity=quantity,
         requested_destination=requested_destination,
         tax_lot_method=tax_lot_method,
         special_instruction=special_instruction,
         order_strategy_type=OrderStrategyType.SINGLE,
         order_leg_collection=[
-            OrderLeg(
+            OrderLegCollection(
                 order_leg_type=OrderLegType.EQUITY,
                 leg_id=1,
                 instrument={
@@ -1156,8 +1139,8 @@ def create_market_on_close_order(
                 instruction=instruction,
                 position_effect=PositionEffect.OPENING,
                 quantity=quantity,
-                quantity_type=QuantityType.ALL_SHARES,
-                div_cap_gains=DividendCapitalGains.REINVEST
+                quantity_type=QuantityType.shares,
+                div_cap_gains=DividendCapitalGains.reinvest
             )
         ]
     )
@@ -1200,29 +1183,24 @@ def create_market_on_close_order(
             order_type=OrderType.LIMIT_ON_CLOSE,
             complex_order_strategy_type=ComplexOrderStrategyType.NONE,
             quantity=quantity,
-            filled_quantity=Decimal("0"),
-            remaining_quantity=quantity,
             requested_destination=requested_destination,
             price=limit_price,
             tax_lot_method=tax_lot_method,
             special_instruction=special_instruction,
             order_strategy_type=OrderStrategyType.SINGLE,
             order_leg_collection=[
-                OrderLeg(
+                OrderLegCollection(
                     order_leg_type=OrderLegType.EQUITY,
                     leg_id=1,
                     instrument={
                         "symbol": symbol,
-                        "description": description or symbol,
-                        "instrument_id": instrument_id or 0,
-                        "net_change": Decimal("0"),
-                        "type": "EQUITY"
+                        "assetType": "EQUITY",
                     },
                     instruction=instruction,
                     position_effect=PositionEffect.OPENING,
                     quantity=quantity,
-                    quantity_type=QuantityType.ALL_SHARES,
-                    div_cap_gains=DividendCapitalGains.REINVEST
+                    quantity_type=QuantityType.shares,
+                    div_cap_gains=DividendCapitalGains.reinvest
                 )
             ]
         )
