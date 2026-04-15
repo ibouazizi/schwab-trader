@@ -8,7 +8,7 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 
 setup(
     name="schwab-trader",
-    version="1.1.1",
+    version="1.2.0",
     author="Imed Bouazizi",
     author_email="vidoptdev@gmail.com",
     description="A Python library for interacting with Charles Schwab's Trading API",
